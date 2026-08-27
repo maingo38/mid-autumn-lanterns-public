@@ -11,12 +11,57 @@
   #audioTip{ position:fixed; left:50%; top:18px; transform:translateX(-50%); z-index:11;
              background:#8a1a12cc; color:#ffe9b0; border:1px solid #ffd77a; border-radius:20px;
              padding:8px 16px; font:600 14px system-ui,sans-serif; box-shadow:0 4px 16px #0007; }
+
+  /* Chú Cuội góc trái dưới — lắc lư nhẹ nhàng, tươi vui */
+  #cuoiWrap{ position:fixed; left:12px; bottom:0; z-index:9; height:32vh; pointer-events:none; }
+  /* gốc xoay ở vùng vai/cổ (~30% từ trên) -> chỉ phần đầu nghiêng, thân đứng yên */
+  #chuCuoi{ height:100%; width:auto; display:block; transform-origin:50% 30%;
+            filter:drop-shadow(0 0 20px #ffcf6a55) drop-shadow(0 6px 14px #0007);
+            animation:cuoiNod 3.4s ease-in-out infinite; }
+  /* quầng sáng ấm ngay chỗ lồng đèn (góc phải-trên ảnh) — làm đèn 'sống' */
+  #cuoiLampGlow{ position:absolute; right:-2%; top:24%; width:34%; height:22%; border-radius:50%;
+                 background:radial-gradient(circle, #ffdf9eaa 0%, #ffcf6a44 40%, transparent 70%);
+                 filter:blur(2px); animation:lampFlicker 1.8s ease-in-out infinite; }
+  @keyframes cuoiNod{
+    0%   { transform:rotate(-2deg); }
+    50%  { transform:rotate(2deg); }
+    100% { transform:rotate(-2deg); }
+  }
+  @keyframes lampFlicker{ 0%,100%{ opacity:.55; transform:scale(1) } 50%{ opacity:1; transform:scale(1.12) } }
+
+  /* QR góc phải dưới — theme Trung thu, nhỏ gọn */
+  #qrCard{ position:fixed; right:18px; bottom:18px; z-index:10; width:96px;
+           padding:7px 7px 6px; text-align:center; font-family:system-ui,sans-serif;
+           background:linear-gradient(160deg,#9a2016,#c23a22 55%,#8a1a12);
+           border:1.5px solid #ffd77a; border-radius:12px;
+           box-shadow:0 8px 22px #0008, 0 0 18px #ffcf6a44; }
+  #qrCard::before{ content:''; position:absolute; inset:3px; border:1px solid #ffd77a55; border-radius:9px; pointer-events:none; }
+  #qrCard .lt{ font-size:15px; margin-top:-16px; filter:drop-shadow(0 0 8px #ffd77a); animation:qbob 3s ease-in-out infinite; }
+  @keyframes qbob{ 0%,100%{transform:translateY(0) rotate(-5deg)} 50%{transform:translateY(-5px) rotate(5deg)} }
+  #qrCard .tt{ color:#ffe9b0; font-weight:800; font-size:8px; margin:1px 0 4px; letter-spacing:.2px; }
+  #qrCard .box{ background:#fff; border-radius:6px; padding:4px; box-shadow:inset 0 0 0 1.5px #ffd77a; }
+  #qrCard .box img{ display:block; width:100%; height:auto; image-rendering:pixelated; border-radius:2px; }
+  #qrCard .ft{ color:#ffd77a; font-size:7px; font-weight:700; margin-top:3px; }
 </style>
 </head>
 <body>
 <canvas id="sky"></canvas>
 <div id="hint">🏮 Mid-Autumn Lantern Sky</div>
 <div id="audioTip">🔊 Chạm một lần để bật âm thanh</div>
+
+<!-- Chú Cuội góc trái, lắc đầu nhẹ tươi cười -->
+<div id="cuoiWrap">
+  <div id="cuoiLampGlow"></div>
+  <img id="chuCuoi" src="/decor/chu-cuoi.png" alt="Chú Cuội">
+</div>
+
+<!-- QR góc phải dưới -->
+<div id="qrCard">
+  <div class="lt">🏮</div>
+  <div class="tt">Quét để thả đèn của bé</div>
+  <div class="box"><img id="qrImg" alt="QR"></div>
+  <div class="ft">🌕 Vui Tết Trung Thu</div>
+</div>
 <!-- Socket.IO is served by our own server at /socket.io/... — no internet needed -->
 <script src="/socket.io/socket.io.js"></script>
 <script>
@@ -59,7 +104,7 @@ const CONFIG = {
 
   // — Cảnh Trung thu (nền) —
   showMoon:      true,    // hiện mặt trăng + chú Cuội, chị Hằng, thỏ ngọc
-  moonScale:     1.0,     // to/nhỏ mặt trăng (1.0 = mặc định)
+  moonScale:     0.68,    // to/nhỏ mặt trăng (1.0 = mặc định)
   moonX:         0.78,    // vị trí ngang mặt trăng (0=trái, 1=phải)
   moonY:         0.28,    // vị trí dọc  (0=trên, 1=dưới)
   showStars:     true,    // sao lấp lánh
@@ -320,6 +365,11 @@ fetch('/api/recent').then(r=>r.json()).then(list => list.forEach(addQuiet));
 const socket = io();
 socket.on('new-lantern', enqueueEntrance);
 
+// load the QR (points at the colouring page) into the corner card
+fetch('/api/qr').then(r=>r.json()).then(({dataUrl}) => {
+  if (dataUrl) document.getElementById('qrImg').src = dataUrl;
+}).catch(()=>{});
+
 // browsers block audio until the first user gesture — one click on the screen unlocks it
 function unlockAudio(){
   try{
@@ -403,7 +453,7 @@ function drawVignette(){
 
 // ── Mặt nước lung linh + phản chiếu ở đáy màn ──
 function drawWater(t){
-  const wy = H*0.82;                       // waterline
+  const wy = H*0.9;                        // waterline (thấp hơn -> bầu trời rộng hơn)
   ctx.save();
   // reflection of the sky/lanterns, flipped & blurred-ish via low alpha bands
   ctx.globalAlpha = 0.22;
@@ -411,13 +461,16 @@ function drawWater(t){
   ctx.scale(1,-1);
   ctx.drawImage(canvas, 0, 0, W, wy, 0, 0, W, wy);   // cheap mirror of top part
   ctx.restore();
-  // shimmer bands
+  // shimmer mềm — vài quầng sáng loang nhẹ, không kẻ sọc
   ctx.save(); ctx.globalCompositeOperation='screen';
-  for (let i=0;i<24;i++){
-    const yy = wy + (i/24)*(H-wy);
-    const a = 0.05 + 0.05*Math.sin(t*0.003 + i*0.6);
-    ctx.fillStyle = `rgba(255,215,140,${a})`;
-    ctx.fillRect(0, yy, W, 2);
+  for (let i=0;i<5;i++){
+    const cx = W*(0.15+0.17*i) + Math.sin(t*0.0004 + i)*40;
+    const cy = wy + (H-wy)*(0.3+0.14*i);
+    const rad = (H-wy)*0.5;
+    const a = 0.05 + 0.03*Math.sin(t*0.001 + i*1.3);
+    const rg = ctx.createRadialGradient(cx,cy,0,cx,cy,rad);
+    rg.addColorStop(0,`rgba(255,215,140,${a})`); rg.addColorStop(1,'rgba(255,215,140,0)');
+    ctx.fillStyle = rg; ctx.fillRect(0,wy,W,H-wy);
   }
   ctx.restore();
   // dark water tint

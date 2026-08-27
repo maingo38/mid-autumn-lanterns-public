@@ -12,8 +12,8 @@
            radial-gradient(1200px 600px at 78% -8%, #4a2a7a55, transparent 60%),
            radial-gradient(900px 500px at 15% 110%, #6d2a4a44, transparent 60%),
            linear-gradient(180deg,#1a0f36,#120a26);
-         display:flex; flex-direction:column; height:100vh; overflow:hidden; }
-  .scene { position:absolute; inset:0; display:none; flex-direction:column; }
+         display:flex; flex-direction:column; height:100dvh; overflow:hidden; }
+  .scene { position:absolute; left:0; right:0; top:0; height:100dvh; display:none; flex-direction:column; }
   .scene.on { display:flex; animation:fadeScene .4s ease; }
   @keyframes fadeScene { from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:none} }
 
@@ -80,25 +80,33 @@
 
   /* ---------- COLOURING ---------- */
   #colour { background:linear-gradient(180deg,#1e1140,#160c2e); }
-  header { padding:10px 12px; font-weight:800; font-size:16px; color:#ffe9b0;
+  header { padding:7px 12px; font-weight:800; font-size:15px; color:#ffe9b0;
            background:linear-gradient(90deg,#2a1a4a,#3a2168,#2a1a4a); letter-spacing:.3px;
            box-shadow:0 2px 10px #0006; display:flex; align-items:center; justify-content:space-between; gap:8px; }
   #backToPick { background:#ffffff1a; color:#ffe9b0; border:1px solid #ffffff33; border-radius:10px;
                 padding:8px 12px; font-size:14px; font-weight:800; width:78px; }
   #backToPick:active { transform:scale(0.94); }
-  #stage { flex:1; display:flex; align-items:center; justify-content:center; position:relative; padding:8px; }
+  #stage { flex:1; min-height:0; display:flex; align-items:center; justify-content:center; position:relative; padding:4px; overflow:hidden; }
   #wrap { position:relative; touch-action:none;
+          transform:translate(0px,0px) scale(1); transform-origin:0 0; will-change:transform;
           filter:drop-shadow(0 10px 24px #0007); }
+  /* zoom controls — floating bottom-right of the drawing stage */
+  #zoomCtl { position:absolute; right:10px; bottom:10px; display:flex; flex-direction:column; gap:6px; z-index:5; }
+  #zoomCtl button { width:44px; height:44px; border:0; border-radius:12px; font-size:24px; font-weight:800;
+                    background:#3a2168dd; color:#ffe9b0; box-shadow:0 3px 12px #0007; backdrop-filter:blur(4px);
+                    display:flex; align-items:center; justify-content:center; line-height:1; }
+  #zoomCtl button:active { transform:scale(0.9); }
+  #zoomReset { font-size:20px; }
   canvas.layer { position:absolute; left:0; top:0; border-radius:14px; }
   #paint { background:#fffdf7; box-shadow:inset 0 0 0 2px #ffffff; }
 
   /* toolbar: brush size + undo */
-  #toolbar { display:flex; gap:8px; padding:10px 14px 2px; background:#241542; justify-content:center; }
-  .tool { width:52px; height:48px; border:1.5px solid #ffffff1f; border-radius:12px; background:#0f0824;
+  #toolbar { display:flex; gap:7px; padding:7px 14px 0; background:#241542; justify-content:center; }
+  .tool { width:50px; height:44px; border:1.5px solid #ffffff1f; border-radius:12px; background:#0f0824;
           font-size:22px; transition:transform .1s, border-color .12s, background .12s; }
   .tool.active { border-color:#ffd166; background:#3a2168; box-shadow:0 0 0 3px #ffd16633; transform:translateY(-2px); }
   .tool:active { transform:scale(0.92); }
-  #tools { display:flex; align-items:center; gap:12px; padding:8px 14px; background:#241542; }
+  #tools { display:flex; align-items:center; gap:12px; padding:6px 14px; background:#241542; }
   #tools .dot { width:var(--sz,16px); height:var(--sz,16px); border-radius:50%; background:#ffd166;
                 box-shadow:0 0 10px #ffd16688; flex:0 0 auto; transition:all .1s; }
   #size { flex:1; accent-color:#ff8c1a; height:28px; }
@@ -106,10 +114,12 @@
              font-size:20px; flex:0 0 auto; box-shadow:0 2px 8px #0004; transition:transform .1s; }
   .iconbtn:active { transform:scale(0.9); }
 
-  /* palette */
-  #palette { display:flex; flex-wrap:wrap; gap:9px; padding:12px 12px 8px; justify-content:center;
-             background:#241542; }
-  .sw { width:44px; height:44px; border-radius:50%; border:3px solid #ffffff22; position:relative;
+  /* palette — 1 hàng cuộn NGANG, dễ chọn trên điện thoại */
+  #palette { display:flex; flex-wrap:nowrap; gap:10px; padding:10px 14px calc(6px + env(safe-area-inset-bottom));
+             background:#241542; overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch;
+             scroll-snap-type:x proximity; scrollbar-width:none; }
+  #palette::-webkit-scrollbar{ display:none; }
+  .sw { width:46px; height:46px; flex:0 0 auto; scroll-snap-align:center; border-radius:50%; border:3px solid #ffffff22; position:relative;
         transition:transform .12s, border-color .12s; box-shadow:0 2px 8px #0005; }
   .sw::after{ content:''; position:absolute; inset:-7px; border-radius:50%; border:2px solid transparent; transition:border-color .12s; }
   .sw.active { transform:scale(1.16); border-color:#fff; }
@@ -283,6 +293,11 @@
       <canvas class="layer" id="paint"></canvas>
       <canvas class="layer" id="lines"></canvas>
     </div>
+    <div id="zoomCtl">
+      <button id="zoomOut" title="Thu nhỏ">−</button>
+      <button id="zoomReset" title="Vừa màn hình">⤢</button>
+      <button id="zoomIn" title="Phóng to">+</button>
+    </div>
   </div>
   <div id="toolbar">
     <button class="tool active" data-tool="brush"   title="Bút vẽ">🖌️</button>
@@ -290,6 +305,7 @@
     <button class="tool"        data-tool="glitter" title="Bút nhũ">✨</button>
     <button class="tool"        data-tool="fill"    title="Đổ màu">🪣</button>
     <button class="tool"        data-tool="eraser"  title="Tẩy">🧽</button>
+    <button class="tool"        data-tool="hand"    title="Di chuyển hình">✋</button>
   </div>
   <div id="tools">
     <span class="dot" id="sizeDot"></span>
@@ -386,7 +402,9 @@ let finalImage = null;
 const NAMES = {
   'tu-do':'✏️ Vẽ tự do',
   'ca-chep':'Cá chép', 'con-rong':'Con rồng', 'hoa-sen':'Hoa sen',
-  'ong-sao':'Ông sao', 'tho-ngoc':'Thỏ ngọc', 'long-den-truyen-thong':'Lồng đèn truyền thống'
+  'ong-sao':'Ông sao', 'tho-ngoc':'Thỏ ngọc', 'long-den-truyen-thong':'Lồng đèn truyền thống',
+  'ca-noc':'Cá nóc', 'meo-om-trang':'Mèo ôm trăng', 'rong-con':'Rồng con',
+  'sua':'Con sứa', 'tau-vu-tru':'Tàu vũ trụ', 'tho-trong-am-tra':'Thỏ trong ấm trà'
 };
 const pretty = s => NAMES[s] || s.replace(/-/g,' ').replace(/\b\w/g, c=>c.toUpperCase());
 
@@ -401,10 +419,22 @@ const lines = document.getElementById('lines');
 const pctx = paint.getContext('2d');
 const lctx = lines.getContext('2d');
 const COLORS = [
-  '#e53935','#ff5252','#ff7043','#ff8c1a','#ffb300','#fdd835','#ffee58','#c0ca33',
-  '#66bb6a','#43a047','#26a69a','#00bcd4','#29b6f6','#1e88e5','#3f51b5','#5e35b1',
-  '#8e24aa','#ab47bc','#ec407a','#f06292','#ff80ab','#8d6e63','#bcaaa4','#607d8b',
-  '#000000','#ffffff'
+  // reds / pinks
+  '#b71c1c','#e53935','#ff5252','#ff8a80','#ffcdd2','#ec407a','#f06292','#ff80ab','#f8bbd0',
+  // orange / brown / skin
+  '#ff7043','#ff8c1a','#fb8c00','#ffa726','#ffcc80','#8d6e63','#a1887f','#bcaaa4','#5d4037',
+  '#ffe0b2','#ffcc9c','#f5c6a5','#e0ac69','#c68642','#8d5524',
+  // yellow / gold
+  '#f9a825','#ffb300','#fdd835','#ffee58','#fff176','#fff9c4',
+  // green
+  '#c0ca33','#9ccc65','#66bb6a','#43a047','#2e7d32','#1b5e20','#26a69a','#00897b','#b2dfdb',
+  // blue / cyan
+  '#00bcd4','#29b6f6','#039be5','#1e88e5','#1565c0','#0d47a1','#80d8ff','#b3e5fc',
+  // purple / indigo
+  '#3f51b5','#5e35b1','#7e57c2','#8e24aa','#ab47bc','#ba68c8','#ce93d8','#e1bee7',
+  // neutrals
+  '#000000','#424242','#757575','#9e9e9e','#bdbdbd','#e0e0e0','#ffffff',
+  '#607d8b','#455a64','#263238'
 ];
 let color = COLORS[0], size = 18, drawing = false;
 let tool = 'brush';          // brush | glow | glitter | eraser | fill
@@ -429,8 +459,11 @@ const maskImg = new Image();
 const lineImg = new Image();
 let maskData = null;
 lineImg.onload = () => {
-  const maxW = Math.min(window.innerWidth-20, 520);
-  const scale = maxW / lineImg.width;
+  // fit vào KHUNG stage theo cả rộng lẫn cao -> mẫu chiếm tối đa không gian
+  const st = document.getElementById('stage');
+  const availW = Math.min((st.clientWidth||window.innerWidth) - 8, 620);
+  const availH = (st.clientHeight||window.innerHeight*0.5) - 8;
+  const scale = Math.min(availW/lineImg.width, availH/lineImg.height);
   const W = Math.round(lineImg.width*scale), H = Math.round(lineImg.height*scale);
   for (const cv of [paint, lines]) { cv.width=W; cv.height=H; }
   pctx.clearRect(0,0,W,H);
@@ -441,6 +474,7 @@ lineImg.onload = () => {
   const m=document.createElement('canvas'); m.width=W; m.height=H;
   const mc=m.getContext('2d'); mc.drawImage(maskImg,0,0,W,H);
   maskData = mc.getImageData(0,0,W,H).data;
+  zoom=1; panX=0; panY=0; applyTransform();   // reset zoom cho mẫu mới
 };
 maskImg.onload = () => { lineImg.src = `/templates/${template}_lines.png`; };
 
@@ -547,6 +581,10 @@ let pts = [];
 let snapshot = null;    // canvas state at stroke start
 
 function pDown(e){
+  if (tool === 'hand'){          // bàn tay: kéo để di chuyển hình, không vẽ
+    handPan={ x:e.clientX, y:e.clientY, panX, panY };
+    lines.setPointerCapture?.(e.pointerId); e.preventDefault(); return;
+  }
   pushUndo();
   const p=pos(e);
   if (tool === 'fill'){          // bucket: one tap floods from that point
@@ -559,6 +597,11 @@ function pDown(e){
   e.preventDefault();
 }
 function pMove(e){
+  if (tool === 'hand' && handPan){    // di chuyển hình theo ngón tay
+    panX = handPan.panX + (e.clientX-handPan.x);
+    panY = handPan.panY + (e.clientY-handPan.y);
+    clampPan(); applyTransform(); e.preventDefault(); return;
+  }
   if(!drawing) return;
   const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
   for(const ev of evs) pts.push(pos(ev));
@@ -566,6 +609,7 @@ function pMove(e){
   e.preventDefault();
 }
 function pUp(e){
+  if (tool === 'hand'){ handPan=null; e.preventDefault?.(); return; }
   if(!drawing) return;
   drawing=false;
   clipToMask();          // trim anything painted outside the lantern shape
@@ -609,6 +653,70 @@ lines.addEventListener('pointermove', pMove, {passive:false});
 lines.addEventListener('pointerup', pUp, {passive:false});
 lines.addEventListener('pointercancel', pUp, {passive:false});
 lines.addEventListener('pointerleave', pUp, {passive:false});
+
+// ---------- zoom & pan (pinch 2 ngón, hoặc nút +/−) ----------
+const wrapEl = document.getElementById('wrap');
+let zoom=1, panX=0, panY=0, handPan=null;
+const ZMIN=1, ZMAX=5;
+function applyTransform(){ wrapEl.style.transform = `translate(${panX}px,${panY}px) scale(${zoom})`; }
+function clampPan(){
+  // giữ hình không kéo ra khỏi khung stage
+  const sw=stageEl.clientWidth, sh=stageEl.clientHeight;
+  const w=paint.width*zoom, h=paint.height*zoom;
+  const minX=Math.min(0, sw-w), minY=Math.min(0, sh-h);
+  const maxX=Math.max(0, sw-w), maxY=Math.max(0, sh-h);
+  panX=Math.max(minX, Math.min(maxX, panX));
+  panY=Math.max(minY, Math.min(maxY, panY));
+}
+function zoomAt(cx, cy, nz){        // cx,cy = tâm zoom trong toạ độ stage
+  nz=Math.max(ZMIN, Math.min(ZMAX, nz));
+  const k=nz/zoom;
+  panX = cx - (cx-panX)*k;
+  panY = cy - (cy-panY)*k;
+  zoom = nz;
+  clampPan(); applyTransform();
+}
+const stageEl = document.getElementById('stage');
+function stageCenter(){ const r=stageEl.getBoundingClientRect(); return {x:r.width/2, y:r.height/2}; }
+document.getElementById('zoomIn').onclick   = ()=>{ const c=stageCenter(); zoomAt(c.x,c.y, zoom*1.4); };
+document.getElementById('zoomOut').onclick  = ()=>{ const c=stageCenter(); zoomAt(c.x,c.y, zoom/1.4); };
+document.getElementById('zoomReset').onclick= ()=>{ zoom=1; panX=0; panY=0; applyTransform(); };
+
+// pinch/pan bằng 2 ngón — bắt ở stage, ưu tiên hơn vẽ
+const pts2 = new Map();
+let pinchStart=null;
+stageEl.addEventListener('pointerdown', e=>{
+  pts2.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  if(pts2.size===2){
+    if(drawing){ drawing=false; const img=undoStack.pop(); if(img) pctx.putImageData(img,0,0); pts=[]; snapshot=null; }
+    const p=[...pts2.values()];
+    const r=stageEl.getBoundingClientRect();
+    pinchStart={ dist:Math.hypot(p[0].x-p[1].x, p[0].y-p[1].y), zoom,
+                 midX:(p[0].x+p[1].x)/2-r.left, midY:(p[0].y+p[1].y)/2-r.top,
+                 panX, panY };
+  }
+}, {passive:false});
+stageEl.addEventListener('pointermove', e=>{
+  if(!pts2.has(e.pointerId)) return;
+  pts2.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  if(pts2.size===2 && pinchStart){
+    const p=[...pts2.values()];
+    const dist=Math.hypot(p[0].x-p[1].x, p[0].y-p[1].y);
+    const r=stageEl.getBoundingClientRect();
+    const midX=(p[0].x+p[1].x)/2-r.left, midY=(p[0].y+p[1].y)/2-r.top;
+    const nz=Math.max(ZMIN, Math.min(ZMAX, pinchStart.zoom*(dist/pinchStart.dist)));
+    const k=nz/pinchStart.zoom;
+    panX = pinchStart.panX + (midX-pinchStart.midX) - (pinchStart.midX-pinchStart.panX)*(k-1);
+    panY = pinchStart.panY + (midY-pinchStart.midY) - (pinchStart.midY-pinchStart.panY)*(k-1);
+    zoom = nz;
+    clampPan(); applyTransform();
+    e.preventDefault();
+  }
+}, {passive:false});
+function endPinch(e){ pts2.delete(e.pointerId); if(pts2.size<2) pinchStart=null; }
+stageEl.addEventListener('pointerup', endPinch);
+stageEl.addEventListener('pointercancel', endPinch);
+stageEl.addEventListener('pointerleave', endPinch);
 
 // tool picker
 document.querySelectorAll('.tool').forEach(btn => {
@@ -781,12 +889,17 @@ document.getElementById('releaseHint').addEventListener('click', launch);
 
 async function launch(){
   if(launched) return; launched=true;
-  // fly-away animation — the row is already confirmed (in the admin queue) via /confirm
+  // GIỜ mới thả lên /screen
+  try {
+    await fetch('/release',{method:'POST',headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ id: previewId })});
+  } catch(e){}
+  // fly-away animation
   releaseArt.style.transition='transform .8s ease-in, opacity .8s ease-in';
   releaseArt.style.transform='translateX(-50%) translateY(-120vh) scale(0.2)';
   releaseArt.style.opacity='0';
-  document.getElementById('doneTitle').textContent = 'Đã gửi lồng đèn của bé! 🎉';
-  document.getElementById('doneMsg').textContent = 'Chờ duyệt một chút, lồng đèn sẽ bay lên màn hình lớn nhé!';
+  document.getElementById('doneTitle').textContent = 'Đã thả lồng đèn của bé! 🎉';
+  document.getElementById('doneMsg').textContent = 'Nhìn lên màn hình lớn, lồng đèn của con đang bay lên bầu trời nhé!';
   setTimeout(()=>show('done'), 800);
 }
 

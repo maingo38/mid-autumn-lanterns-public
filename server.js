@@ -157,11 +157,6 @@ app.get('/qr', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'qr.html'));
 });
 
-// operator moderation console
-app.get('/admin', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
-});
-
 // list available lantern templates (any *_lines.png in public/templates)
 app.get('/api/templates', (req, res) => {
   const dir = path.join(__dirname, 'public', 'templates');
@@ -182,38 +177,6 @@ app.get('/api/recent', (req, res) => {
   res.json(rows.reverse());
 });
 
-// pending (+ still-processing) lanterns for the operator console
-app.get('/api/pending', (req, res) => {
-  const rows = db.prepare(
-    "SELECT id, file, ai_file, template, name, wish, status, created FROM lanterns " +
-    "WHERE status IN ('pending','processing') ORDER BY id ASC"
-  ).all();
-  res.json(rows);
-});
-
-// operator decision: approve -> fly it to the screen; reject -> delete the image
-app.post('/api/moderate', (req, res) => {
-  const { id, action } = req.body || {};
-  const row = db.prepare('SELECT * FROM lanterns WHERE id=?').get(id);
-  if (!row) return res.status(404).json({ error: 'not found' });
-
-  if (action === 'approve') {
-    db.prepare("UPDATE lanterns SET status='approved' WHERE id=?").run(id);
-    io.emit('new-lantern', { id: row.id, file: row.ai_file || row.file,   // prefer AI render
-      template: row.template, name: row.name, wish: row.wish, created: row.created });
-    io.emit('pending-changed');
-    return res.json({ ok: true });
-  }
-  if (action === 'reject') {
-    db.prepare("UPDATE lanterns SET status='rejected' WHERE id=?").run(id);
-    try { fs.unlinkSync(path.join(LANTERN_DIR, row.file)); } catch (e) {}
-    if (row.ai_file) try { fs.unlinkSync(path.join(LANTERN_DIR, row.ai_file)); } catch (e) {}
-    io.emit('pending-changed');
-    return res.json({ ok: true });
-  }
-  res.status(400).json({ error: 'bad action' });
-});
-
 // The address kids reach the colouring page at. Behind Cloudflare Tunnel this
 // MUST be the public URL (e.g. https://lantern.example.com), not the LAN IP —
 // set PUBLIC_URL in the environment. Falls back to the LAN IP for local dev.
@@ -227,8 +190,8 @@ app.get('/api/qr', async (req, res) => {
   const url = publicBase();
   try {
     const dataUrl = await qrcode.toDataURL(url, {
-      margin: 2, width: 560, errorCorrectionLevel: 'H',   // high error-correction = easier scan
-      color: { dark: '#160a28', light: '#ffffff' },       // dark on solid white = max contrast
+      margin: 2, width: 720, errorCorrectionLevel: 'M',   // M = ít module hơn -> dễ quét khi in/hiển thị nhỏ
+      color: { dark: '#000000', light: '#ffffff' },       // đen thuần trên trắng = tương phản tối đa
     });
     res.json({ url, dataUrl });
   } catch (e) {
@@ -238,7 +201,7 @@ app.get('/api/qr', async (req, res) => {
 
 // NEW WORKFLOW — child previews the AI result before it goes to the operator:
 //   POST /preview  -> run AI now, return {id, ai} (base64) so the child sees it
-//   POST /confirm  -> child likes it: move that row into the admin queue
+//   POST /confirm  -> child likes it: fly it straight to the screen (no moderation)
 //   (no confirm / redraw = the 'preview' row is just left; /preview overwrites on retry)
 app.post('/preview', async (req, res) => {
   const { image, template, name } = req.body || {};
@@ -256,9 +219,7 @@ app.post('/preview', async (req, res) => {
   const id = info.lastInsertRowid;
 
   if (!AI.enabled) {
-    // no AI: nothing to preview — behave like a straight submit into moderation
-    db.prepare("UPDATE lanterns SET status='pending' WHERE id=?").run(id);
-    io.emit('pending-changed');
+    // no AI: preview the raw drawing; /confirm will fly it to the screen
     return res.json({ id, ai: image, aiEnabled: false });
   }
 
@@ -275,14 +236,25 @@ app.post('/preview', async (req, res) => {
   }
 });
 
+// bé viết điều ước xong -> CHỈ lưu, chưa lên screen (đợi bấm "Thả lên Bầu trời")
 app.post('/confirm', (req, res) => {
   const { id, wish } = req.body || {};
   const row = db.prepare('SELECT * FROM lanterns WHERE id=?').get(id);
   if (!row) return res.status(404).json({ error: 'not found' });
   const w = (wish || '').toString().trim().slice(0, 140) || null;
-  db.prepare("UPDATE lanterns SET status='pending', wish=? WHERE id=?").run(w, id);
-  io.emit('pending-changed');
-  res.json({ ok: true, moderated: MODERATION });
+  db.prepare("UPDATE lanterns SET status='ready', wish=? WHERE id=?").run(w, id);
+  res.json({ ok: true });
+});
+
+// bé bấm "Thả lên Bầu trời" -> giờ mới bay lên /screen
+app.post('/release', (req, res) => {
+  const { id } = req.body || {};
+  const row = db.prepare('SELECT * FROM lanterns WHERE id=?').get(id);
+  if (!row) return res.status(404).json({ error: 'not found' });
+  db.prepare("UPDATE lanterns SET status='approved' WHERE id=?").run(id);
+  io.emit('new-lantern', { id: row.id, file: row.ai_file || row.file,   // ưu tiên ảnh AI
+    template: row.template, name: row.name, wish: row.wish, created: row.created });
+  res.json({ ok: true });
 });
 
 // phone posts { image: "data:image/png;base64,...", template: "star", name: "Bi" }
@@ -424,7 +396,6 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('\n=== Mid-Autumn Lanterns ===');
   console.log('Phone colouring page :', url);
   console.log('Big screen           :', `${url}/screen`);
-  console.log('Admin (duyệt)        :', `${url}/admin`);
   console.log('QR page              :', `${url}/qr`);
   console.log('AI proxy             :', AI.enabled ? AI.proxyUrl : 'OFF');
   console.log('\nKids scan this QR to open the colouring page:\n');
