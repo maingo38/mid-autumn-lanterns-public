@@ -1,0 +1,15 @@
+{
+  "name": "mid-autumn-lanterns",
+  "version": "1.0.0",
+  "description": "Kids color a lantern on their phone; it flies onto the big screen (teamLab Sketch-Aquarium style)",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "express": "^4.19.2",
+    "qrcode": "^1.5.4",
+    "socket.io": "^4.7.5"
+  }
+}

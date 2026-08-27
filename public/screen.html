@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Bầu trời lồng đèn</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a0620;}
+  canvas{display:block;}
+  #hint{position:fixed;left:12px;bottom:10px;color:#ffffff55;font:14px system-ui;}
+
+  #audioTip{ position:fixed; left:50%; top:18px; transform:translateX(-50%); z-index:11;
+             background:#8a1a12cc; color:#ffe9b0; border:1px solid #ffd77a; border-radius:20px;
+             padding:8px 16px; font:600 14px system-ui,sans-serif; box-shadow:0 4px 16px #0007; }
+</style>
+</head>
+<body>
+<canvas id="sky"></canvas>
+<div id="hint">🏮 Mid-Autumn Lantern Sky</div>
+<div id="audioTip">🔊 Chạm một lần để bật âm thanh</div>
+<!-- Socket.IO is served by our own server at /socket.io/... — no internet needed -->
+<script src="/socket.io/socket.io.js"></script>
+<script>
+// ══════════════════════════════════════════════════════════════════
+//  CÀI ĐẶT — chỉnh mọi thứ ở đây. Sửa số → Lưu (Cmd+S) → Refresh (Cmd+R)
+// ══════════════════════════════════════════════════════════════════
+const CONFIG = {
+  maxLanterns:   150,     // số lồng đèn tối đa trên màn (cũ nhất mờ dần khi vượt)
+  lanternPx:     150,     // đường kính mục tiêu mỗi lồng đèn (px) — nhỏ = chứa nhiều bé hơn
+  showNames:     true,    // hiện tên bé dưới mỗi lồng đèn khi bay (bé tự tìm được đèn mình)
+  spotZoom:      1.9,     // độ phóng to khi "soi" một lồng đèn — nhẹ nhàng, vừa đủ đọc
+  spotEase:      0.07,    // tốc độ zoom vào/ra (nhỏ = chậm rãi, dịu dàng)
+
+  // — Tốc độ & đường bay —
+  speedMin:      0.25,    // bay chậm nhất  (số nhỏ = chậm, thư thái)
+  speedMax:      0.60,    // bay nhanh nhất (số to  = nhanh hơn)
+  curve:         0.02,    // độ lượn cong  (0.02 nhẹ · 0.04 lượn rõ · 0.06 gắt)
+
+  // — Đung đưa (lắc theo gió) —
+  wobbleMin:     6,       // lắc ít nhất  (biên độ, pixel)
+  wobbleMax:     16,      // lắc nhiều nhất
+
+  // — Xoay —
+  spin:          0.008,   // tốc độ xoay tròn chậm (0 = không xoay)
+
+  // — Kích thước lồng đèn (nhân với lanternPx; giữ ~1 để đồng đều) —
+  sizeMin:       0.85,    // nhỏ nhất
+  sizeMax:       1.15,    // to nhất
+
+  // — Hiện ra / biến mất —
+  fadeInSpeed:   0.05,    // tốc độ hiện ra (số to = hiện nhanh)
+
+  // — Ánh sáng phát quang (glow) —
+  glowColor:     'rgba(255,180,80,0.6)',  // màu quầng sáng
+  glowSize:      30,      // độ lớn quầng sáng (0 = tắt glow)
+
+  // — Nền trời —
+  skyTop:        '#0a0620',  // màu trời phía trên
+  skyBottom:     '#241348',  // màu trời phía dưới
+
+  // — Cảnh Trung thu (nền) —
+  showMoon:      true,    // hiện mặt trăng + chú Cuội, chị Hằng, thỏ ngọc
+  moonScale:     1.0,     // to/nhỏ mặt trăng (1.0 = mặc định)
+  moonX:         0.78,    // vị trí ngang mặt trăng (0=trái, 1=phải)
+  moonY:         0.28,    // vị trí dọc  (0=trên, 1=dưới)
+  showStars:     true,    // sao lấp lánh
+  starCount:     90,      // số ngôi sao
+  showClouds:    true,    // mây trôi mờ
+
+  edgeMargin:    60,      // cách mép bao nhiêu px thì vòng lại (không sát viền)
+
+  // — Hiệu ứng chào sân —
+  confetti:      true,    // pháo giấy khi lồng đèn mới xuất hiện
+  confettiCount: 110,     // số mảnh pháo giấy mỗi lần
+  sound:         true,    // tiếng "ting" lúc chào sân
+  soundVolume:   0.35,    // âm lượng (0–1)
+
+  // — Hiệu ứng điện ảnh (nền) —
+  bokeh:         true,    // đốm sáng mờ lơ lửng (chiều sâu)
+  bokehCount:    18,
+  shootingStars: true,    // sao băng thỉnh thoảng vụt qua
+  water:         true,    // mặt nước lung linh + phản chiếu ở đáy màn
+  candleFlicker: true,    // ánh nến lập loè bên trong mỗi lồng đèn
+  vignette:      true,    // tối nhẹ 4 góc cho chất điện ảnh
+};
+// ══════════════════════════════════════════════════════════════════
+
+const canvas = document.getElementById('sky');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize(){ W = canvas.width = innerWidth; H = canvas.height = innerHeight; }
+resize(); addEventListener('resize', resize);
+
+const MAX = CONFIG.maxLanterns;
+const lanterns = [];
+let spotlight = null;     // lantern currently held/zoomed by the operator
+const rand = (a, b) => a + Math.random()*(b - a);   // số ngẫu nhiên trong [a,b]
+
+// wrap long wish text onto multiple centred lines
+function wrapText(ctx, text, x, y, maxW, lh){
+  const words = text.split(' '); let line='', yy=y;
+  for (const w of words){
+    const test = line ? line+' '+w : w;
+    if (ctx.measureText(test).width > maxW && line){ ctx.fillText(line, x, yy); line=w; yy+=lh; }
+    else line=test;
+  }
+  if (line) ctx.fillText(line, x, yy);
+}
+
+// pick the lantern nearest a screen point (within its radius)
+function lanternAt(px, py){
+  let best=null, bestD=Infinity;
+  for (const l of lanterns){
+    if (l.leaving || l._r==null) continue;
+    const dx=px-l._cx, dy=py-l._cy, d=Math.hypot(dx,dy);
+    if (d < Math.max(l._r, 40) && d < bestD){ bestD=d; best=l; }
+  }
+  return best;
+}
+
+// press-and-hold to spotlight; release to let it float again
+function spotStart(e){
+  const r = canvas.getBoundingClientRect();
+  const t = e.touches ? e.touches[0] : e;
+  const px = (t.clientX-r.left)*(W/r.width), py=(t.clientY-r.top)*(H/r.height);
+  spotlight = lanternAt(px, py);
+  if (spotlight) e.preventDefault();
+}
+function spotEnd(){ spotlight = null; }
+addEventListener('pointerdown', spotStart, {passive:false});
+addEventListener('pointerup', spotEnd);
+addEventListener('pointercancel', spotEnd);
+addEventListener('pointerleave', spotEnd);
+
+// normalise every lantern to ~lanternPx regardless of source image size
+function fitScale(img){
+  return (CONFIG.lanternPx / Math.max(img.width, img.height)) * rand(CONFIG.sizeMin, CONFIG.sizeMax);
+}
+
+// release a lantern into the flying sky (used after the grand entrance)
+function releaseToSky(img, name, wish){
+  const speed = rand(CONFIG.speedMin, CONFIG.speedMax);
+  const heading = -Math.PI/2 + rand(-0.6,0.6);   // start heading upward
+  const target = fitScale(img);
+  lanterns.push({
+    img, name: name || '', wish: wish || '',
+    x: W*0.5, y: H*0.5,
+    heading, speed,
+    vx: Math.cos(heading)*speed, vy: Math.sin(heading)*speed,
+    turn: (Math.random()-0.5)*CONFIG.curve,
+    phase: Math.random()*Math.PI*2,
+    drift: 0.4 + Math.random()*0.5,
+    amp: rand(CONFIG.wobbleMin, CONFIG.wobbleMax),
+    spin: (Math.random()-0.5)*CONFIG.spin*2,
+    rot: 0,
+    scale: target*0.5, targetScale: target,
+    alpha: 1, targetAlpha: 1,
+    flick: Math.random()*Math.PI*2,        // candle flicker phase
+    born: performance.now()
+  });
+  const alive = lanterns.filter(x=>!x.leaving);
+  if (alive.length > MAX){
+    alive.sort((a,b)=>a.born-b.born);
+    const old = alive[0];
+    old.leaving = true; old.targetAlpha = 0; old.targetScale = 0.02;
+  }
+}
+
+// add an OLD lantern straight into the sky (no ceremony) — used on page load
+function addQuiet(rec){
+  const img = new Image();
+  img.onload = () => {
+    releaseToSky(img, rec.name, rec.wish);
+    const last = lanterns[lanterns.length-1];
+    last.x = Math.random()*W*0.8 + W*0.1;
+    last.y = Math.random()*H*0.7 + H*0.12;
+    last.scale = last.targetScale;
+  };
+  img.src = '/lanterns/' + rec.file;
+}
+
+// ── GRAND ENTRANCE queue: new lanterns arrive centre-stage first ──
+const entranceQ = [];
+let entrance = null;   // {img, name, t0}
+const ENTRANCE_MS = 4000;
+
+function enqueueEntrance(rec){
+  const img = new Image();
+  img.onload = () => entranceQ.push({ img, name: rec.name || '', wish: rec.wish || '' });
+  img.src = '/lanterns/' + rec.file;
+}
+function pumpEntrance(t){
+  if (!entrance && entranceQ.length){
+    entrance = entranceQ.shift(); entrance.t0 = t;
+    if (CONFIG.confetti) burstConfetti(W*0.5, H*0.46);   // pop on arrival
+    if (CONFIG.sound)    playTing();
+  }
+  if (entrance && t - entrance.t0 > ENTRANCE_MS){
+    releaseToSky(entrance.img, entrance.name, entrance.wish);   // hand it off to the flying sky
+    entrance = null;
+  }
+}
+
+// ── Confetti (giấy pháo Trung thu) ──
+const confetti = [];
+const CONFETTI_COLORS = ['#ffd166','#ff8c1a','#e53935','#f06292','#43a047','#57e6ff','#fff6e2'];
+function burstConfetti(cx, cy){
+  for (let i=0;i<CONFIG.confettiCount;i++){
+    const a = Math.random()*Math.PI*2;
+    const sp = rand(3, 12);
+    confetti.push({
+      x: cx, y: cy,
+      vx: Math.cos(a)*sp,
+      vy: Math.sin(a)*sp - rand(2,6),      // bias upward
+      g: rand(0.12,0.22),                  // gravity
+      w: rand(6,12), h: rand(8,16),
+      rot: Math.random()*Math.PI, vr: (Math.random()-0.5)*0.3,
+      color: CONFETTI_COLORS[(Math.random()*CONFETTI_COLORS.length)|0],
+      life: 1
+    });
+  }
+}
+function drawConfetti(){
+  for (let i=confetti.length-1;i>=0;i--){
+    const c = confetti[i];
+    c.vy += c.g; c.x += c.vx; c.y += c.vy; c.vx *= 0.99; c.rot += c.vr;
+    c.life -= 0.008;
+    if (c.life <= 0 || c.y > H+40){ confetti.splice(i,1); continue; }
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, c.life);
+    ctx.translate(c.x, c.y); ctx.rotate(c.rot);
+    ctx.fillStyle = c.color;
+    ctx.fillRect(-c.w/2, -c.h/2, c.w, c.h);
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ── Âm thanh "ting" (WebAudio, không cần file) ──
+let audioCtx = null;
+function playTing(){
+  try{
+    audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const now = audioCtx.currentTime;
+    // hai nốt chime nhẹ (như chuông gió)
+    [ [880, 0], [1320, 0.12] ].forEach(([freq, delay]) => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine'; osc.frequency.value = freq;
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      const t0 = now + delay;
+      gain.gain.setValueAtTime(0, t0);
+      gain.gain.linearRampToValueAtTime(CONFIG.soundVolume, t0 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.1);
+      osc.start(t0); osc.stop(t0 + 1.2);
+    });
+  }catch(e){ /* audio blocked until first interaction — see hint below */ }
+}
+function drawEntrance(t){
+  if (!entrance) return;
+  const p = (t - entrance.t0) / ENTRANCE_MS;      // 0..1
+  // dim the sky a bit so the star of the show pops
+  ctx.fillStyle = `rgba(5,3,20,${0.55*Math.min(1,p*3)*(1-Math.max(0,(p-0.8)/0.2))})`;
+  ctx.fillRect(0,0,W,H);
+
+  const cx=W*0.5, cy=H*0.46;
+  const img = entrance.img;
+  // pop-in scale then gentle float
+  const grow = p<0.25 ? (p/0.25) : 1;
+  const ease = 1 - Math.pow(1-grow, 3);
+  const base = Math.min(W,H) * 0.34 / Math.max(img.width,img.height);
+  const s = base * (0.2 + 0.8*ease) * (1 + Math.sin(t*0.004)*0.03);
+  const iw=img.width*s, ih=img.height*s;
+
+  // radiating light rays
+  ctx.save(); ctx.translate(cx,cy);
+  ctx.globalAlpha = 0.5*ease*(1-Math.max(0,(p-0.7)/0.3));
+  const rot=t*0.0004;
+  for(let i=0;i<12;i++){
+    ctx.rotate(Math.PI/6 + rot);
+    const rg=ctx.createLinearGradient(0,0,0,-Math.max(W,H));
+    rg.addColorStop(0,'rgba(255,220,130,0.5)'); rg.addColorStop(1,'rgba(255,220,130,0)');
+    ctx.fillStyle=rg; ctx.beginPath(); ctx.moveTo(-30,0); ctx.lineTo(30,0); ctx.lineTo(0,-Math.max(W,H)); ctx.fill();
+  }
+  ctx.restore();
+
+  // glow halo
+  const halo=ctx.createRadialGradient(cx,cy,ih*0.2, cx,cy,ih*0.9);
+  halo.addColorStop(0,'rgba(255,225,150,0.7)'); halo.addColorStop(1,'rgba(255,225,150,0)');
+  ctx.fillStyle=halo; ctx.beginPath(); ctx.arc(cx,cy,ih*0.9,0,Math.PI*2); ctx.fill();
+
+  // the lantern
+  ctx.save(); ctx.globalAlpha=1; ctx.translate(cx,cy);
+  ctx.shadowColor='rgba(255,190,90,0.9)'; ctx.shadowBlur=40;
+  ctx.drawImage(img,-iw/2,-ih/2,iw,ih); ctx.restore();
+
+  // name + caption
+  ctx.globalAlpha = Math.min(1,p*4)*(1-Math.max(0,(p-0.8)/0.2));
+  ctx.textAlign='center'; ctx.shadowColor='rgba(0,0,0,0.6)'; ctx.shadowBlur=12;
+  if (entrance.name){
+    ctx.fillStyle='#fff'; ctx.font=`700 ${Math.round(Math.min(W,H)*0.06)}px system-ui,sans-serif`;
+    ctx.fillText('🏮 ' + entrance.name, cx, cy + ih*0.72);
+  }
+  ctx.fillStyle='#ffd77a'; ctx.font=`600 ${Math.round(Math.min(W,H)*0.032)}px system-ui,sans-serif`;
+  const sub = entrance.wish ? 'gửi một điều ước lên trời…' : 'vừa thả một chiếc lồng đèn!';
+  ctx.fillText(sub, cx, cy + ih*0.72 + Math.min(W,H)*0.06);
+  // the wish itself, in a soft italic line
+  if (entrance.wish){
+    ctx.fillStyle='#fff'; ctx.font=`italic 500 ${Math.round(Math.min(W,H)*0.03)}px Georgia, serif`;
+    const w = entrance.wish.length>60 ? entrance.wish.slice(0,60)+'…' : entrance.wish;
+    ctx.fillText('“'+w+'”', cx, cy + ih*0.72 + Math.min(W,H)*0.104);
+  }
+  ctx.shadowBlur=0; ctx.globalAlpha=1;
+}
+
+// load whatever already exists (so restarting the screen doesn't lose the wall)
+fetch('/api/recent').then(r=>r.json()).then(list => list.forEach(addQuiet));
+
+// live updates -> grand entrance
+const socket = io();
+socket.on('new-lantern', enqueueEntrance);
+
+// browsers block audio until the first user gesture — one click on the screen unlocks it
+function unlockAudio(){
+  try{
+    audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  }catch(e){}
+  const tip = document.getElementById('audioTip');
+  if (tip) tip.style.display = 'none';
+  window.removeEventListener('click', unlockAudio);
+  window.removeEventListener('keydown', unlockAudio);
+}
+window.addEventListener('click', unlockAudio);
+window.addEventListener('keydown', unlockAudio);
+
+// ── Cảnh nền Trung thu: sao, mây, mặt trăng + Cuội/Hằng/thỏ ─────────
+const stars = [];
+function seedStars(){
+  stars.length = 0;
+  for (let i=0;i<CONFIG.starCount;i++)
+    stars.push({ x:Math.random(), y:Math.random()*0.7, r:rand(0.6,1.8), tw:rand(0,Math.PI*2), sp:rand(0.5,2) });
+}
+seedStars();
+
+function drawStars(t){
+  for (const s of stars){
+    const a = 0.4 + 0.6*Math.abs(Math.sin(t*0.001*s.sp + s.tw));
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(s.x*W, s.y*H, s.r, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ── Bokeh: đốm sáng mờ lơ lửng tạo chiều sâu ──
+const bokeh = [];
+function seedBokeh(){
+  bokeh.length = 0;
+  for (let i=0;i<CONFIG.bokehCount;i++)
+    bokeh.push({ x:Math.random(), y:Math.random(), r:rand(20,70), sp:rand(0.02,0.08),
+                 ph:rand(0,Math.PI*2), hue:rand(35,50) });
+}
+seedBokeh();
+function drawBokeh(t){
+  ctx.save(); ctx.globalCompositeOperation='lighter';
+  for (const b of bokeh){
+    const y = ((b.y - t*0.00001*b.sp*8) % 1 + 1) % 1;
+    const a = 0.05 + 0.05*Math.sin(t*0.001 + b.ph);
+    const g = ctx.createRadialGradient(b.x*W, y*H, 0, b.x*W, y*H, b.r);
+    g.addColorStop(0, `hsla(${b.hue},100%,70%,${a})`);
+    g.addColorStop(1, 'hsla(45,100%,70%,0)');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(b.x*W, y*H, b.r, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+// ── Sao băng: thỉnh thoảng vụt qua ──
+const shooters = [];
+function maybeShoot(t){
+  if (shooters.length < 2 && Math.random() < 0.004){
+    const y = rand(0.05,0.4)*H, x = rand(0.1,0.7)*W;
+    shooters.push({ x, y, vx: rand(6,10), vy: rand(2,4), life:1, len:rand(120,220) });
+  }
+  for (let i=shooters.length-1;i>=0;i--){
+    const s = shooters[i];
+    s.x += s.vx; s.y += s.vy; s.life -= 0.012;
+    if (s.life<=0){ shooters.splice(i,1); continue; }
+    const g = ctx.createLinearGradient(s.x, s.y, s.x - s.len, s.y - s.len*0.35);
+    g.addColorStop(0, `rgba(255,255,255,${s.life})`);
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.strokeStyle=g; ctx.lineWidth=2; ctx.beginPath();
+    ctx.moveTo(s.x, s.y); ctx.lineTo(s.x - s.len, s.y - s.len*0.35); ctx.stroke();
+  }
+}
+
+// ── Vignette: tối nhẹ 4 góc ──
+function drawVignette(){
+  const g = ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*0.35, W/2,H/2,Math.max(W,H)*0.75);
+  g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,0.55)');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+}
+
+// ── Mặt nước lung linh + phản chiếu ở đáy màn ──
+function drawWater(t){
+  const wy = H*0.82;                       // waterline
+  ctx.save();
+  // reflection of the sky/lanterns, flipped & blurred-ish via low alpha bands
+  ctx.globalAlpha = 0.22;
+  ctx.translate(0, wy*2);
+  ctx.scale(1,-1);
+  ctx.drawImage(canvas, 0, 0, W, wy, 0, 0, W, wy);   // cheap mirror of top part
+  ctx.restore();
+  // shimmer bands
+  ctx.save(); ctx.globalCompositeOperation='screen';
+  for (let i=0;i<24;i++){
+    const yy = wy + (i/24)*(H-wy);
+    const a = 0.05 + 0.05*Math.sin(t*0.003 + i*0.6);
+    ctx.fillStyle = `rgba(255,215,140,${a})`;
+    ctx.fillRect(0, yy, W, 2);
+  }
+  ctx.restore();
+  // dark water tint
+  const g = ctx.createLinearGradient(0,wy,0,H);
+  g.addColorStop(0,'rgba(10,6,32,0.2)'); g.addColorStop(1,'rgba(10,6,32,0.7)');
+  ctx.fillStyle=g; ctx.fillRect(0,wy,W,H-wy);
+}
+
+function drawClouds(t){
+  const drift = (t*0.008) % (W+400) - 200;
+  ctx.fillStyle = 'rgba(255,255,255,0.05)';
+  for (let k=0;k<3;k++){
+    const y = H*(0.55 + k*0.13);
+    const x = (drift + k*W*0.4) % (W+400) - 200;
+    for (let j=0;j<5;j++){
+      ctx.beginPath();
+      ctx.ellipse(x + j*70, y + Math.sin(j)*10, 60, 26, 0, 0, Math.PI*2); ctx.fill();
+    }
+  }
+}
+
+// silhouette of the banyan tree, Cuội, Hằng and the jade rabbit, drawn INSIDE the moon
+function drawMoonScene(cx, cy, R){
+  ctx.save();
+  // clip to moon disc so the scene stays inside
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI*2); ctx.clip();
+  const dark = 'rgba(120,110,70,0.35)';     // soft brown silhouette on the moon
+  ctx.fillStyle = dark;
+  ctx.strokeStyle = dark;
+
+  const ground = cy + R*0.62;
+  // ground line
+  ctx.fillRect(cx - R, ground, R*2, R);
+
+  // — Cây đa (banyan tree) on the right —
+  const tx = cx + R*0.45;
+  ctx.lineWidth = R*0.05;
+  ctx.beginPath(); ctx.moveTo(tx, ground); ctx.lineTo(tx, cy - R*0.15); ctx.stroke();
+  // hanging roots
+  for (let i=-2;i<=2;i++){
+    ctx.lineWidth = R*0.015;
+    ctx.beginPath(); ctx.moveTo(tx + i*R*0.12, cy - R*0.05);
+    ctx.lineTo(tx + i*R*0.12, cy + R*0.2); ctx.stroke();
+  }
+  // canopy
+  for (const [dx,dy,r] of [[0,-0.28,0.26],[-0.2,-0.18,0.2],[0.22,-0.16,0.2],[0.02,-0.42,0.18]]){
+    ctx.beginPath(); ctx.arc(tx + dx*R, cy + dy*R, r*R, 0, Math.PI*2); ctx.fill();
+  }
+
+  // helper: a little seated/standing person silhouette
+  function person(px, py, s, sitting){
+    ctx.beginPath(); ctx.arc(px, py - s*1.15, s*0.32, 0, Math.PI*2); ctx.fill();   // head
+    ctx.beginPath();
+    if (sitting){
+      ctx.moveTo(px - s*0.4, py);
+      ctx.quadraticCurveTo(px, py - s*1.0, px + s*0.4, py);
+      ctx.lineTo(px + s*0.5, py + s*0.15);
+      ctx.lineTo(px - s*0.5, py + s*0.15);
+    } else {
+      ctx.moveTo(px - s*0.32, py + s*0.1);              // flowing robe (Hằng)
+      ctx.quadraticCurveTo(px, py - s*1.05, px + s*0.32, py + s*0.1);
+      ctx.quadraticCurveTo(px + s*0.15, py + s*0.15, px, py + s*0.12);
+      ctx.quadraticCurveTo(px - s*0.15, py + s*0.15, px - s*0.32, py + s*0.1);
+    }
+    ctx.closePath(); ctx.fill();
+  }
+
+  // — Chú Cuội: ngồi dưới gốc cây đa —
+  person(tx - R*0.28, ground, R*0.2, true);
+
+  // — Chị Hằng: đứng bên trái, dáng áo dài thướt tha —
+  person(cx - R*0.4, ground, R*0.26, false);
+  // búi tóc
+  ctx.beginPath(); ctx.arc(cx - R*0.4, ground - R*0.34, R*0.06, 0, Math.PI*2); ctx.fill();
+
+  // — Thỏ ngọc: cạnh chân chị Hằng, đang giã thuốc —
+  const rx = cx - R*0.12, ry = ground - R*0.02;
+  ctx.beginPath(); ctx.ellipse(rx, ry, R*0.09, R*0.13, 0, 0, Math.PI*2); ctx.fill();  // body
+  ctx.beginPath(); ctx.arc(rx, ry - R*0.14, R*0.055, 0, Math.PI*2); ctx.fill();       // head
+  // hai tai
+  ctx.lineWidth = R*0.02;
+  ctx.beginPath(); ctx.moveTo(rx, ry - R*0.18); ctx.lineTo(rx - R*0.02, ry - R*0.3); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(rx + R*0.02, ry - R*0.18); ctx.lineTo(rx + R*0.04, ry - R*0.3); ctx.stroke();
+  // cối giã thuốc
+  ctx.fillRect(rx + R*0.1, ry, R*0.06, R*0.08);
+
+  ctx.restore();
+}
+
+function drawMoon(t){
+  const R = Math.min(W,H) * 0.16 * CONFIG.moonScale;
+  const cx = W*CONFIG.moonX, cy = H*CONFIG.moonY;
+  // outer glow halo
+  const halo = ctx.createRadialGradient(cx,cy,R*0.6, cx,cy,R*2.2);
+  halo.addColorStop(0,'rgba(255,240,200,0.55)');
+  halo.addColorStop(1,'rgba(255,240,200,0)');
+  ctx.fillStyle = halo;
+  ctx.beginPath(); ctx.arc(cx,cy,R*2.2,0,Math.PI*2); ctx.fill();
+  // moon disc
+  const disc = ctx.createRadialGradient(cx-R*0.3,cy-R*0.3,R*0.2, cx,cy,R);
+  disc.addColorStop(0,'#fff8e6'); disc.addColorStop(1,'#ffdf9e');
+  ctx.fillStyle = disc;
+  ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fill();
+  // the legend, inside the moon
+  drawMoonScene(cx, cy, R);
+}
+
+function frame(t){
+  ctx.clearRect(0,0,W,H);
+  // soft night-sky gradient
+  const g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,CONFIG.skyTop); g.addColorStop(1,CONFIG.skyBottom);
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+
+  if (CONFIG.showStars)     drawStars(t);
+  if (CONFIG.shootingStars) maybeShoot(t);
+  if (CONFIG.bokeh)         drawBokeh(t);
+  if (CONFIG.showClouds)    drawClouds(t);
+  if (CONFIG.showMoon)      drawMoon(t);
+
+  for (let i=lanterns.length-1;i>=0;i--){
+    const l = lanterns[i];
+    const isSpot = (l === spotlight);
+    // ease a 0..1 "spotlight" factor for a gentle, dreamy zoom in/out
+    l.spot = (l.spot||0) + ((isSpot?1:0) - (l.spot||0)) * CONFIG.spotEase;
+
+    // ease scale & alpha toward target
+    l.scale += (l.targetScale - l.scale)*0.06;
+    l.alpha += (l.targetAlpha - l.alpha)*CONFIG.fadeInSpeed;
+    // wander — but a spotlighted lantern nearly freezes so it's easy to read
+    const moveMul = 1 - l.spot*0.92;
+    l.phase += 0.02*l.drift;
+    l.heading += l.turn + Math.sin(l.phase*0.5)*0.006;
+    if (Math.sin(l.phase*0.13) > 0.995) l.turn = (Math.random()-0.5)*CONFIG.curve;
+    l.vx = Math.cos(l.heading)*l.speed;
+    l.vy = Math.sin(l.heading)*l.speed;
+    l.x += l.vx*moveMul;
+    l.y += l.vy*moveMul;
+    const m = CONFIG.edgeMargin;
+    if (l.x < m)      l.heading = Math.atan2(l.vy,  Math.abs(l.vx));
+    if (l.x > W - m)  l.heading = Math.atan2(l.vy, -Math.abs(l.vx));
+    if (l.y < m)      l.heading = Math.atan2( Math.abs(l.vy), l.vx);
+    if (l.y > H - m)  l.heading = Math.atan2(-Math.abs(l.vy), l.vx);
+    const wobbleX = Math.sin(l.phase)*l.amp*(1-l.spot);
+    const wobbleY = Math.cos(l.phase*0.8)*l.amp*0.5*(1-l.spot);
+    l.rot += l.spin;
+    const rot = (l.rot + Math.sin(l.phase)*0.05) * (1-l.spot);   // straighten when spotlighted
+
+    const zoom = 1 + l.spot*(CONFIG.spotZoom-1);
+    const iw = l.img.width*l.scale*zoom, ih = l.img.height*l.scale*zoom;
+    const cx = l.x+wobbleX, cy = l.y+wobbleY;
+    // remember footprint for hit-testing (use un-zoomed radius so it's easy to grab)
+    l._cx = l.x; l._cy = l.y; l._r = Math.max(l.img.width,l.img.height)*l.scale*0.5;
+
+    ctx.save();
+    ctx.globalAlpha = Math.max(0,Math.min(1,l.alpha));
+    ctx.translate(cx, cy);
+    ctx.rotate(rot);
+    // candle flicker glow (stronger while spotlighted)
+    if (CONFIG.candleFlicker){
+      l.flick += 0.15 + Math.random()*0.1;
+      const fl = 0.6 + 0.4*Math.sin(l.flick) + (Math.random()-0.5)*0.15;
+      ctx.save(); ctx.globalCompositeOperation='lighter';
+      const gl = ctx.createRadialGradient(0,0,0, 0,0,ih*0.6);
+      gl.addColorStop(0, `rgba(255,190,90,${(0.35+l.spot*0.4)*fl*l.alpha})`);
+      gl.addColorStop(1, 'rgba(255,190,90,0)');
+      ctx.fillStyle=gl; ctx.beginPath(); ctx.arc(0,0,ih*0.6,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+    ctx.shadowColor = CONFIG.glowColor; ctx.shadowBlur = CONFIG.glowSize + l.spot*30;
+    ctx.drawImage(l.img, -iw/2, -ih/2, iw, ih);
+    ctx.restore();
+
+    // name tag under the lantern (grows a bit with spotlight)
+    if (CONFIG.showNames && l.name && l.spot < 0.5){
+      ctx.save();
+      ctx.globalAlpha = Math.max(0,Math.min(1,l.alpha))*0.9*(1-l.spot*2>0?1-l.spot*2:0);
+      ctx.translate(cx, cy + ih*0.62);
+      ctx.textAlign='center';
+      ctx.font=`600 ${Math.max(11, Math.round(ih*0.12))}px system-ui,sans-serif`;
+      ctx.shadowColor='rgba(0,0,0,0.7)'; ctx.shadowBlur=6;
+      ctx.fillStyle='#ffe9b0';
+      ctx.fillText(l.name, 0, 0);
+      ctx.restore();
+    }
+
+    // spotlight card: big name + wish
+    if (l.spot > 0.02){
+      ctx.save();
+      ctx.globalAlpha = l.spot;
+      ctx.textAlign='center';
+      ctx.shadowColor='rgba(0,0,0,0.75)'; ctx.shadowBlur=14;
+      const nameY = cy + ih*0.60;
+      if (l.name){
+        ctx.fillStyle='#fff'; ctx.font=`800 ${Math.round(Math.min(W,H)*0.045)}px system-ui,sans-serif`;
+        ctx.fillText('🏮 ' + l.name, cx, nameY);
+      }
+      if (l.wish){
+        ctx.fillStyle='#ffe9b0'; ctx.font=`italic 500 ${Math.round(Math.min(W,H)*0.032)}px Georgia,serif`;
+        wrapText(ctx, '“'+l.wish+'”', cx, nameY + Math.min(W,H)*0.055, Math.min(W*0.7,560), Math.min(W,H)*0.042);
+      }
+      ctx.restore();
+    }
+
+    if (l.leaving && l.alpha < 0.02) lanterns.splice(i,1);   // fully gone
+  }
+
+  if (CONFIG.water) drawWater(t);
+
+  // grand entrance sits on TOP of the flying sky
+  pumpEntrance(t);
+  drawEntrance(t);
+  drawConfetti();
+
+  if (CONFIG.vignette) drawVignette();
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+node_modules
+npm-debug.log
+.DS_Store
+**/.DS_Store
+server.log
+lanterns.db
+public/lanterns/lantern_*
+templates-incoming
+*.md
+.git
+.gitignore
+Dockerfile
+.dockerignore
+docker-compose.yml

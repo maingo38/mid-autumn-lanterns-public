@@ -1,0 +1,13 @@
+node_modules/
+npm-debug.log*
+.DS_Store
+**/.DS_Store
+server.log
+
+# runtime data — regenerated at runtime, kept in docker volumes
+lanterns.db
+public/lanterns/lantern_*
+
+# incoming template working folder
+templates-incoming/*
+!templates-incoming/README.md

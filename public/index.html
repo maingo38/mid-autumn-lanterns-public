@@ -1,0 +1,825 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Tô màu lồng đèn</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; -webkit-user-select:none; user-select:none; }
+  html,body { margin:0; height:100%; }
+  body { font-family: system-ui, sans-serif; color:#fff;
+         background:
+           radial-gradient(1200px 600px at 78% -8%, #4a2a7a55, transparent 60%),
+           radial-gradient(900px 500px at 15% 110%, #6d2a4a44, transparent 60%),
+           linear-gradient(180deg,#1a0f36,#120a26);
+         display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+  .scene { position:absolute; inset:0; display:none; flex-direction:column; }
+  .scene.on { display:flex; animation:fadeScene .4s ease; }
+  @keyframes fadeScene { from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:none} }
+
+  /* twinkle starfield shared by welcome + pick */
+  .starfield{ position:absolute; inset:0; pointer-events:none; z-index:0; }
+
+  /* floating lanterns drifting up the background */
+  .floaters{ position:absolute; inset:0; pointer-events:none; z-index:0; overflow:hidden; }
+  .floaters span{ position:absolute; bottom:-14vh; font-size:34px; opacity:.5;
+                  filter:drop-shadow(0 0 10px #ffb84daa); animation:floatUp linear infinite; }
+  @keyframes floatUp{
+    0%{ transform:translateY(0) rotate(-6deg); opacity:0; }
+    12%{ opacity:.55; }
+    88%{ opacity:.55; }
+    100%{ transform:translateY(-120vh) rotate(6deg); opacity:0; }
+  }
+  /* soft glowing moon-halo top-right of the welcome screen */
+  #welcome::before{ content:''; position:absolute; z-index:0; top:-12%; right:-8%;
+    width:56vw; height:56vw; max-width:420px; max-height:420px; border-radius:50%;
+    background:radial-gradient(circle, #ffe6a855 0%, #ffcf6a22 40%, transparent 70%); }
+
+  /* ---------- WELCOME ---------- */
+  #welcome { align-items:center; justify-content:center; text-align:center; padding:28px; position:relative; }
+  #welcome > * { position:relative; z-index:1; }
+  #welcome .moon { font-size:88px; filter:drop-shadow(0 0 30px #ffd77a); animation:bob 3.4s ease-in-out infinite; }
+  @keyframes bob { 0%,100%{transform:translateY(0) rotate(-3deg)} 50%{transform:translateY(-14px) rotate(3deg)} }
+  #welcome h1 { font-size:28px; margin:18px 0 6px; font-weight:900; letter-spacing:.3px;
+                background:linear-gradient(90deg,#ffe9b0,#ffd166,#ff8c1a);
+                -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+  #welcome p  { color:#c9b8ff; margin:0 0 26px; font-size:15px; }
+  #name { width:100%; max-width:320px; padding:16px; font-size:18px; text-align:center; color:#fff;
+          border:1.5px solid #ffffff33; border-radius:16px; background:#ffffff10; backdrop-filter:blur(8px);
+          outline:none; transition:border-color .2s, box-shadow .2s; }
+  #name:focus { border-color:#ffd166; box-shadow:0 0 0 4px #ffd16633; }
+  #name::placeholder{ color:#ffffff66; }
+  .big { width:100%; max-width:320px; margin-top:18px; padding:17px; font-size:19px; font-weight:900;
+         border:0; border-radius:16px; color:#3a1500; letter-spacing:.3px;
+         background:linear-gradient(90deg,#ffe08a,#ffd166,#ff9a1a);
+         box-shadow:0 8px 26px #ff8c1a55, inset 0 1px 0 #fff8; transition:transform .12s, box-shadow .2s; }
+  .big:active { transform:scale(0.97); box-shadow:0 4px 14px #ff8c1a55; }
+
+  /* ---------- PICK TEMPLATE ---------- */
+  #pick { position:relative; }
+  #pick > * { position:relative; z-index:1; }
+  #pick h2 { text-align:center; padding:20px 16px 2px; font-size:21px; font-weight:900; }
+  #pick .who { text-align:center; color:#ffd77a; font-weight:700; margin-bottom:10px; font-size:15px; }
+  #grid { flex:1; overflow-y:auto; display:grid; grid-template-columns:1fr 1fr;
+          gap:14px; padding:8px 16px calc(18px + env(safe-area-inset-bottom)); }
+  .tpl { position:relative; border-radius:20px; padding:14px 12px 12px; cursor:pointer;
+         background:linear-gradient(180deg,#ffffff14,#ffffff08);
+         border:1.5px solid #ffffff1f; backdrop-filter:blur(6px);
+         display:flex; flex-direction:column; align-items:center; gap:10px;
+         box-shadow:0 6px 18px #0004; transition:transform .14s, border-color .14s, box-shadow .2s;
+         animation:cardIn .35s ease backwards; }
+  .tpl:nth-child(2){animation-delay:.05s}.tpl:nth-child(3){animation-delay:.1s}
+  .tpl:nth-child(4){animation-delay:.15s}.tpl:nth-child(5){animation-delay:.2s}
+  .tpl:nth-child(6){animation-delay:.25s}
+  @keyframes cardIn{ from{opacity:0; transform:translateY(12px) scale(.96)} to{opacity:1; transform:none} }
+  .tpl img { width:100%; height:128px; object-fit:contain; filter:drop-shadow(0 6px 14px #ffd77a44); transition:transform .2s; }
+  .tpl span { font-weight:800; font-size:14px; color:#ffe9b0; }
+  .tpl:active { transform:scale(0.95); }
+  .tpl:hover { border-color:#ffd16688; box-shadow:0 10px 26px #ffcf6a33; }
+  .tpl:hover img { transform:scale(1.06) translateY(-2px); }
+
+  /* ---------- COLOURING ---------- */
+  #colour { background:linear-gradient(180deg,#1e1140,#160c2e); }
+  header { padding:10px 12px; font-weight:800; font-size:16px; color:#ffe9b0;
+           background:linear-gradient(90deg,#2a1a4a,#3a2168,#2a1a4a); letter-spacing:.3px;
+           box-shadow:0 2px 10px #0006; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  #backToPick { background:#ffffff1a; color:#ffe9b0; border:1px solid #ffffff33; border-radius:10px;
+                padding:8px 12px; font-size:14px; font-weight:800; width:78px; }
+  #backToPick:active { transform:scale(0.94); }
+  #stage { flex:1; display:flex; align-items:center; justify-content:center; position:relative; padding:8px; }
+  #wrap { position:relative; touch-action:none;
+          filter:drop-shadow(0 10px 24px #0007); }
+  canvas.layer { position:absolute; left:0; top:0; border-radius:14px; }
+  #paint { background:#fffdf7; box-shadow:inset 0 0 0 2px #ffffff; }
+
+  /* toolbar: brush size + undo */
+  #toolbar { display:flex; gap:8px; padding:10px 14px 2px; background:#241542; justify-content:center; }
+  .tool { width:52px; height:48px; border:1.5px solid #ffffff1f; border-radius:12px; background:#0f0824;
+          font-size:22px; transition:transform .1s, border-color .12s, background .12s; }
+  .tool.active { border-color:#ffd166; background:#3a2168; box-shadow:0 0 0 3px #ffd16633; transform:translateY(-2px); }
+  .tool:active { transform:scale(0.92); }
+  #tools { display:flex; align-items:center; gap:12px; padding:8px 14px; background:#241542; }
+  #tools .dot { width:var(--sz,16px); height:var(--sz,16px); border-radius:50%; background:#ffd166;
+                box-shadow:0 0 10px #ffd16688; flex:0 0 auto; transition:all .1s; }
+  #size { flex:1; accent-color:#ff8c1a; height:28px; }
+  .iconbtn { width:46px; height:46px; border:0; border-radius:12px; background:#3a2168; color:#fff;
+             font-size:20px; flex:0 0 auto; box-shadow:0 2px 8px #0004; transition:transform .1s; }
+  .iconbtn:active { transform:scale(0.9); }
+
+  /* palette */
+  #palette { display:flex; flex-wrap:wrap; gap:9px; padding:12px 12px 8px; justify-content:center;
+             background:#241542; }
+  .sw { width:44px; height:44px; border-radius:50%; border:3px solid #ffffff22; position:relative;
+        transition:transform .12s, border-color .12s; box-shadow:0 2px 8px #0005; }
+  .sw::after{ content:''; position:absolute; inset:-7px; border-radius:50%; border:2px solid transparent; transition:border-color .12s; }
+  .sw.active { transform:scale(1.16); border-color:#fff; }
+  .sw.active::after{ border-color:#ffd166; }
+
+  .controls { display:flex; gap:10px; padding:10px 14px calc(14px + env(safe-area-inset-bottom)); background:#241542; }
+  .controls button { flex:1; padding:17px; font-size:17px; font-weight:800; border:0; border-radius:14px; color:#fff;
+                     box-shadow:0 4px 14px #0005; transition:transform .1s; }
+  .controls button:active { transform:scale(0.97); }
+  #clear { background:#4a3a6a; flex:0 0 92px; }
+  #send { background:linear-gradient(90deg,#ffd166,#ff8c1a); color:#160c2e; text-shadow:0 1px 0 #fff5; }
+
+  /* ---------- SCAN CEREMONY ---------- */
+  #scan { align-items:center; justify-content:center; background:#0b0620; overflow:hidden; }
+  #scanArt { max-width:70vw; max-height:50vh; filter:drop-shadow(0 0 24px #ffd77a); }
+  .scanline { position:absolute; left:0; right:0; height:4px;
+              background:linear-gradient(90deg,transparent,#57e6ff,#fff,#57e6ff,transparent);
+              box-shadow:0 0 18px #57e6ff; animation:scanmove 1.4s ease-in-out infinite; }
+  @keyframes scanmove { 0%{top:24%} 50%{top:74%} 100%{top:24%} }
+  #scanTxt { position:absolute; bottom:16%; width:100%; text-align:center; font-size:20px; font-weight:800; color:#57e6ff;
+             text-shadow:0 0 12px #57e6ff; }
+  #count { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+           font-size:120px; font-weight:900; color:#fff; text-shadow:0 0 30px #ffd77a; }
+
+  /* ---------- RELEASE (swipe up) ---------- */
+  #release { align-items:center; justify-content:flex-start; overflow:hidden;
+             background:radial-gradient(circle at 50% 15%, #3a2470, #1a0f3a 55%, #0b0620 100%); }
+  #release > * { position:relative; z-index:1; }
+  #relMoon { position:absolute; top:4%; left:50%; transform:translateX(-50%); z-index:0;
+             font-size:96px; filter:drop-shadow(0 0 40px #ffe6a8); animation:bob 4s ease-in-out infinite; opacity:.85; }
+  #relTitle { margin-top:10%; text-align:center; font-size:22px; font-weight:900; padding:0 20px;
+              background:linear-gradient(90deg,#ffe9b0,#ffd166,#ff8c1a);
+              -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+  #relHalo { position:absolute; left:50%; bottom:24%; width:70vw; max-width:420px; height:70vw; max-height:420px;
+             transform:translate(-50%,50%); z-index:0; pointer-events:none;
+             background:radial-gradient(circle, #ffd77a55 0%, #ffcf6a22 35%, transparent 68%);
+             animation:haloPulse 2.6s ease-in-out infinite; }
+  @keyframes haloPulse { 0%,100%{opacity:.55; transform:translate(-50%,50%) scale(1)} 50%{opacity:.9; transform:translate(-50%,50%) scale(1.12)} }
+  #releaseArt { position:absolute; left:50%; bottom:16%; transform:translateX(-50%);
+                max-width:60vw; max-height:46vh; touch-action:none; z-index:1;
+                filter:drop-shadow(0 0 30px #ffd77a) drop-shadow(0 6px 18px #0008);
+                animation:lanternFloat 3.2s ease-in-out infinite; }
+  @keyframes lanternFloat { 0%,100%{ margin-bottom:0 } 50%{ margin-bottom:14px } }
+  #releaseHint { position:absolute; bottom:5%; width:100%; text-align:center; color:#ffe9b0; font-weight:800; font-size:17px;
+                 letter-spacing:.3px; text-shadow:0 0 12px #ffcf6a88; animation:pulse 1.6s ease-in-out infinite; }
+  #releaseHint .pill { display:inline-flex; align-items:center; gap:8px; padding:10px 18px;
+                       background:#ffffff14; border:1.5px solid #ffd16655; border-radius:999px; backdrop-filter:blur(6px); }
+  .arrow { font-size:22px; display:inline-block; animation:up 1.2s ease-in-out infinite; }
+  @keyframes up { 0%,100%{transform:translateY(0);opacity:.5} 50%{transform:translateY(-8px);opacity:1} }
+  @keyframes pulse { 0%,100%{opacity:.7} 50%{opacity:1} }
+
+  /* ---------- DONE ---------- */
+  #done { align-items:center; justify-content:center; text-align:center; padding:24px;
+          background:radial-gradient(circle at 50% 30%, #2a1a5a, #160c2e 70%); }
+  #done .up { font-size:64px; animation:up 1.6s ease-in-out infinite; }
+  #done h2 { font-size:24px; margin:10px 0; }
+  #done p { color:#c9b8ff; }
+
+  /* ---------- PREVIEW (drawing vs AI) ---------- */
+  #preview { align-items:center; justify-content:center; text-align:center; padding:20px; position:relative; }
+  #preview > * { position:relative; z-index:1; }
+  #previewTitle { font-size:23px; font-weight:900; margin:0 0 20px;
+                  background:linear-gradient(90deg,#ffe9b0,#ffd166,#ff8c1a);
+                  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+  /* desktop: side by side, centred; mobile: stacked (drawing on top, AI below) */
+  #compare { display:flex; align-items:center; justify-content:center; gap:16px; width:100%;
+             max-width:760px; margin:0 auto; }
+  #compare figure { margin:0; flex:1; max-width:340px; }
+  #compare img { width:100%; aspect-ratio:1/1; object-fit:contain; border-radius:16px;
+                 background:#ffffff10; border:1.5px solid #ffffff22; padding:6px; }
+  #compare #pvAI { border-color:#ffd16688; box-shadow:0 0 28px #ffcf6a55; }
+  #compare figcaption { margin-top:8px; font-size:14px; font-weight:700; color:#c9b8ff; }
+  #compare figure:last-child figcaption { color:#ffd77a; }
+  .arrow2 { font-size:30px; color:#ffd166; flex:0 0 auto; }
+  @media (max-width: 640px) {
+    #compare { flex-direction:column; gap:8px; max-width:340px; }
+    #compare figure { width:100%; max-width:none; }
+    #compare img { max-height:34vh; }
+    .arrow2 { transform:rotate(90deg); font-size:24px; }
+    #previewTitle { margin-bottom:12px; }
+  }
+  .pvbtns { display:flex; gap:10px; margin-top:26px; width:100%; max-width:440px; }
+  .pvbtns button { flex:1; padding:16px; font-size:16px; font-weight:800; border:0; border-radius:14px; }
+  #pvRedraw { background:#3a2168; color:#ffe9b0; border:1.5px solid #ffffff33; flex:0 0 40%; }
+  #pvRedraw:active { transform:scale(0.96); }
+
+  /* ---------- WISH (đáng yêu, thân thương) ---------- */
+  #wish { align-items:center; justify-content:center; text-align:center; padding:20px 22px; position:relative;
+          background:radial-gradient(120% 80% at 50% 8%, #3a2470 0%, #241348 45%, #160c2e 100%); }
+  #wish > * { position:relative; z-index:1; }
+  .wishClouds{ position:absolute; inset:0; z-index:0; pointer-events:none; overflow:hidden; }
+  .wishClouds span{ position:absolute; font-size:40px; opacity:.18; animation:cloudDrift linear infinite; }
+  .wishClouds span:nth-child(1){ top:14%; animation-duration:26s; }
+  .wishClouds span:nth-child(2){ top:30%; font-size:56px; animation-duration:34s; animation-delay:-8s; }
+  .wishClouds span:nth-child(3){ top:52%; animation-duration:30s; animation-delay:-16s; }
+  @keyframes cloudDrift{ from{ left:-20% } to{ left:120% } }
+
+  /* the little scene: moon behind, tree + characters in front */
+  #wishStage{ position:relative; width:230px; height:150px; margin:4px auto 6px; }
+  #wishStage span{ position:absolute; }
+  #wishStage .moonBig{ font-size:118px; left:50%; top:-6px; transform:translateX(-50%);
+                       filter:drop-shadow(0 0 34px #ffe6a8); animation:bob 4.5s ease-in-out infinite; }
+  #wishStage .tree{ font-size:70px; right:6px; bottom:-6px; filter:drop-shadow(0 4px 6px #0006); }
+  #wishStage .cuoi{ font-size:52px; right:44px; bottom:-2px; z-index:2; animation:bob 3.4s ease-in-out infinite; }
+  #wishStage .hang{ font-size:56px; left:34px; bottom:-2px; z-index:2; animation:bob 3.8s ease-in-out infinite .4s; }
+  #wishStage .rabbit{ font-size:30px; left:92px; bottom:-4px; z-index:2; animation:hop 1.8s ease-in-out infinite; }
+  @keyframes hop{ 0%,100%{ transform:translateY(0) } 50%{ transform:translateY(-8px) } }
+
+  #wishBubble { position:relative; max-width:340px; margin:2px auto 16px;
+                background:linear-gradient(180deg,#fff8ea,#ffeccf); color:#5a3a12;
+                border:2px solid #ffd77a; border-radius:20px; padding:14px 18px;
+                box-shadow:0 8px 22px #0005; }
+  #wishBubble::after{ content:''; position:absolute; top:-11px; left:50%; transform:translateX(-50%);
+                      border:10px solid transparent; border-bottom-color:#ffd77a; }
+  #wishLead { margin:0; font-size:15px; line-height:1.5; font-weight:600; }
+
+  #wishField { position:relative; width:100%; max-width:360px; }
+  #wishText { width:100%; height:104px; padding:15px 15px 26px; font-size:16px; line-height:1.45; color:#4a2f0a; resize:none;
+              border:2px solid #ffd77a; border-radius:18px; outline:none;
+              background:#fffdf7 url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><text y='18' font-size='16'>🌟</text></svg>") no-repeat right 10px bottom 8px;
+              box-shadow:inset 0 2px 6px #0000000d; font-family:inherit; }
+  #wishText:focus { border-color:#ff9a1a; box-shadow:0 0 0 4px #ffd16644; }
+  #wishText::placeholder { color:#b58a4f; }
+  #wishCount { position:absolute; right:14px; bottom:8px; font-size:11px; color:#b58a4f; }
+  #wishSkip { background:#ffffff18; color:#ffe9b0; border:1.5px solid #ffffff33; flex:0 0 36%; }
+  #wishSkip:active { transform:scale(0.96); }
+  /* hàng lồng đèn treo lấp lánh ở đáy màn */
+  #wishLanterns{ position:absolute; left:0; right:0; bottom:0; z-index:0; pointer-events:none;
+                 display:flex; justify-content:space-around; align-items:flex-start;
+                 padding:0 6px; height:80px; opacity:.9;
+                 -webkit-mask-image:linear-gradient(180deg,#000,#000 70%,transparent);
+                 mask-image:linear-gradient(180deg,#000,#000 70%,transparent); }
+  #wishLanterns span{ font-size:30px; filter:drop-shadow(0 0 10px #ffb84daa);
+                      animation:hangSway 3s ease-in-out infinite; transform-origin:top center; }
+  #wishLanterns span:nth-child(odd){ font-size:34px; animation-duration:3.6s; }
+  #wishLanterns span:nth-child(2n){ animation-delay:-.6s; }
+  #wishLanterns span:nth-child(3n){ animation-delay:-1.2s; font-size:22px; }
+  @keyframes hangSway{ 0%,100%{ transform:rotate(-7deg) translateY(0) } 50%{ transform:rotate(7deg) translateY(-4px) } }
+</style>
+</head>
+<body>
+
+<!-- ========== 1. WELCOME ========== -->
+<div class="scene on" id="welcome">
+  <canvas class="starfield"></canvas>
+  <div class="floaters" id="floaters"></div>
+  <div class="moon">🌕</div>
+  <h1>Bé ơi, cùng làm lồng đèn nhé!</h1>
+  <p>Tô màu thật đẹp rồi thả lên bầu trời 🏮</p>
+  <input id="name" placeholder="Tên của bé (không bắt buộc)" maxlength="16">
+  <button class="big" id="startBtn">Tiếp tục ✨</button>
+</div>
+
+<!-- ========== 1b. PICK TEMPLATE ========== -->
+<div class="scene" id="pick">
+  <canvas class="starfield"></canvas>
+  <h2>Chọn mẫu lồng đèn bé thích 🏮</h2>
+  <div class="who" id="pickWho"></div>
+  <div id="grid"></div>
+</div>
+
+<!-- ========== 2. COLOURING ========== -->
+<div class="scene" id="colour">
+  <header>
+    <button id="backToPick" title="Đổi mẫu">‹ Đổi mẫu</button>
+    <span>🏮 Tô màu lồng đèn</span>
+    <span style="width:78px"></span>
+  </header>
+  <div id="stage">
+    <div id="wrap">
+      <canvas class="layer" id="paint"></canvas>
+      <canvas class="layer" id="lines"></canvas>
+    </div>
+  </div>
+  <div id="toolbar">
+    <button class="tool active" data-tool="brush"   title="Bút vẽ">🖌️</button>
+    <button class="tool"        data-tool="glow"    title="Bút phát sáng">🌟</button>
+    <button class="tool"        data-tool="glitter" title="Bút nhũ">✨</button>
+    <button class="tool"        data-tool="fill"    title="Đổ màu">🪣</button>
+    <button class="tool"        data-tool="eraser"  title="Tẩy">🧽</button>
+  </div>
+  <div id="tools">
+    <span class="dot" id="sizeDot"></span>
+    <input id="size" type="range" min="6" max="48" value="18">
+    <button class="iconbtn" id="undo" title="Hoàn tác">↩️</button>
+  </div>
+  <div id="palette"></div>
+  <div class="controls">
+    <button id="clear">Xoá hết</button>
+    <button id="send">Biến phép màu ✨</button>
+  </div>
+</div>
+
+<!-- ========== 3. SCAN CEREMONY ========== -->
+<div class="scene" id="scan">
+  <img id="scanArt">
+  <div class="scanline"></div>
+  <div id="scanTxt">Đang quét lồng đèn…</div>
+  <div id="count"></div>
+</div>
+
+<!-- ========== 3b. PREVIEW: drawing vs AI ========== -->
+<div class="scene" id="preview">
+  <canvas class="starfield"></canvas>
+  <h2 id="previewTitle">Phép màu của bé đây! ✨</h2>
+  <div id="compare">
+    <figure><img id="pvDraw"><figcaption>Bé vẽ</figcaption></figure>
+    <div class="arrow2">→</div>
+    <figure><img id="pvAI"><figcaption>Phép màu ✨</figcaption></figure>
+  </div>
+  <div class="pvbtns">
+    <button id="pvRedraw">✏️ Vẽ lại</button>
+    <button id="pvOk" class="big">Mình thích nó! 💛</button>
+  </div>
+</div>
+
+<!-- ========== 3c. WISH (Hằng & Cuội dẫn chuyện) ========== -->
+<div class="scene" id="wish">
+  <canvas class="starfield"></canvas>
+  <div class="wishClouds"><span>☁️</span><span>☁️</span><span>☁️</span></div>
+
+  <div id="wishStage">
+    <span class="moonBig">🌕</span>
+    <span class="tree">🌳</span>
+    <span class="cuoi">🧑‍🌾</span>
+    <span class="hang">🧝‍♀️</span>
+    <span class="rabbit">🐰</span>
+  </div>
+
+  <div id="wishBubble">
+    <p id="wishLead">Chị Hằng và chú Cuội đang chờ trên cung trăng…</p>
+  </div>
+
+  <div id="wishField">
+    <textarea id="wishText" maxlength="140" placeholder="Điều ước của bé là gì? Ví dụ: con mong cả nhà luôn khoẻ mạnh 🌟"></textarea>
+    <div id="wishCount">0/140</div>
+  </div>
+
+  <div class="pvbtns">
+    <button id="wishSkip">Để lần sau</button>
+    <button id="wishSend" class="big">Gửi điều ước 🌠</button>
+  </div>
+
+  <div id="wishLanterns">
+    <span>🏮</span><span>🌟</span><span>🏮</span><span>✨</span><span>🏮</span><span>🌟</span><span>🏮</span>
+  </div>
+</div>
+
+<!-- ========== 4. RELEASE (swipe up) ========== -->
+<div class="scene" id="release">
+  <canvas class="starfield"></canvas>
+  <div id="relMoon">🌕</div>
+  <h2 id="relTitle">Thả lồng đèn lên bầu trời</h2>
+  <div id="relHalo"></div>
+  <img id="releaseArt">
+  <div id="releaseHint"><span class="pill"><span class="arrow">⬆️</span> Vuốt lên để thả đèn</span></div>
+</div>
+
+<!-- ========== 5. DONE ========== -->
+<div class="scene" id="done">
+  <div class="up">🏮</div>
+  <h2 id="doneTitle">Lồng đèn của bé đang bay! 🎉</h2>
+  <p id="doneMsg">Nhìn lên màn hình lớn để tìm lồng đèn của mình nhé!</p>
+  <button class="big" onclick="location.reload()">Làm cái mới</button>
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+let template = params.get('t') || null;   // may be preset via ?t=, else chosen in the picker
+let childName = '';
+let finalImage = null;
+
+// nice display names for known templates (fallback: prettified slug)
+const NAMES = {
+  'tu-do':'✏️ Vẽ tự do',
+  'ca-chep':'Cá chép', 'con-rong':'Con rồng', 'hoa-sen':'Hoa sen',
+  'ong-sao':'Ông sao', 'tho-ngoc':'Thỏ ngọc', 'long-den-truyen-thong':'Lồng đèn truyền thống'
+};
+const pretty = s => NAMES[s] || s.replace(/-/g,' ').replace(/\b\w/g, c=>c.toUpperCase());
+
+const show = id => {
+  document.querySelectorAll('.scene').forEach(s => s.classList.remove('on'));
+  document.getElementById(id).classList.add('on');
+};
+
+// ---------- colouring setup ----------
+const paint = document.getElementById('paint');
+const lines = document.getElementById('lines');
+const pctx = paint.getContext('2d');
+const lctx = lines.getContext('2d');
+const COLORS = [
+  '#e53935','#ff5252','#ff7043','#ff8c1a','#ffb300','#fdd835','#ffee58','#c0ca33',
+  '#66bb6a','#43a047','#26a69a','#00bcd4','#29b6f6','#1e88e5','#3f51b5','#5e35b1',
+  '#8e24aa','#ab47bc','#ec407a','#f06292','#ff80ab','#8d6e63','#bcaaa4','#607d8b',
+  '#000000','#ffffff'
+];
+let color = COLORS[0], size = 18, drawing = false;
+let tool = 'brush';          // brush | glow | glitter | eraser | fill
+const undoStack = [];
+
+// smooth, high-quality brush
+pctx.lineCap = 'round'; pctx.lineJoin = 'round';
+
+const pal = document.getElementById('palette');
+COLORS.forEach((c,i) => {
+  const b = document.createElement('div');
+  b.className = 'sw' + (i===0?' active':''); b.style.background = c;
+  b.onclick = () => { color=c; document.querySelectorAll('.sw').forEach(s=>s.classList.remove('active')); b.classList.add('active'); syncSize(); };
+  pal.appendChild(b);
+});
+const sizeEl = document.getElementById('size');
+const sizeDot = document.getElementById('sizeDot');
+function syncSize(){ size = +sizeEl.value; sizeDot.style.setProperty('--sz', size+'px'); sizeDot.style.background = color; }
+sizeEl.oninput = syncSize;
+
+const maskImg = new Image();
+const lineImg = new Image();
+let maskData = null;
+lineImg.onload = () => {
+  const maxW = Math.min(window.innerWidth-20, 520);
+  const scale = maxW / lineImg.width;
+  const W = Math.round(lineImg.width*scale), H = Math.round(lineImg.height*scale);
+  for (const cv of [paint, lines]) { cv.width=W; cv.height=H; }
+  pctx.clearRect(0,0,W,H);
+  document.getElementById('wrap').style.width = W+'px';
+  document.getElementById('wrap').style.height = H+'px';
+  lctx.clearRect(0,0,W,H);
+  lctx.drawImage(lineImg,0,0,W,H);
+  const m=document.createElement('canvas'); m.width=W; m.height=H;
+  const mc=m.getContext('2d'); mc.drawImage(maskImg,0,0,W,H);
+  maskData = mc.getImageData(0,0,W,H).data;
+};
+maskImg.onload = () => { lineImg.src = `/templates/${template}_lines.png`; };
+
+// load a chosen template's art + mask, then go to the colouring scene
+function loadTemplate(name){
+  template = name;
+  maskData = null;
+  undoStack.length = 0;
+  maskImg.src = `/templates/${template}_mask.png`;   // triggers lineImg via onload
+  syncSize();
+  show('colour');
+}
+
+function insideMask(x,y){
+  if(!maskData) return true;
+  const xi=Math.floor(x), yi=Math.floor(y);
+  if(xi<0||yi<0||xi>=paint.width||yi>=paint.height) return false;
+  return maskData[(yi*paint.width + xi)*4 + 3] > 20;
+}
+function pos(e){
+  const r = paint.getBoundingClientRect();
+  return { x:(e.clientX-r.left)*(paint.width/r.width),
+           y:(e.clientY-r.top)*(paint.height/r.height) };
+}
+// apply the current tool's paint style to pctx before a stroke/dab
+function applyToolStyle(){
+  pctx.globalCompositeOperation = (tool === 'eraser') ? 'destination-out' : 'source-over';
+  pctx.shadowBlur = 0; pctx.globalAlpha = 1;
+  pctx.strokeStyle = pctx.fillStyle = color;
+  if (tool === 'glow'){                 // soft luminous halo
+    pctx.shadowColor = color; pctx.shadowBlur = size * 0.9;
+  }
+}
+// draw a continuous stroke between two points (no gaps when moving fast)
+function strokeSeg(x0,y0,x1,y1){
+  applyToolStyle();
+  pctx.lineWidth = size;
+  pctx.beginPath(); pctx.moveTo(x0,y0); pctx.lineTo(x1,y1); pctx.stroke();
+  if (tool === 'glitter') sprinkle((x0+x1)/2,(y0+y1)/2);
+}
+// scatter little sparkle dots around a point (glitter pen)
+function sprinkle(x,y){
+  pctx.save(); pctx.globalCompositeOperation='source-over'; pctx.shadowBlur=0;
+  const n = 4 + (Math.random()*4|0);
+  for(let i=0;i<n;i++){
+    const a=Math.random()*Math.PI*2, r=Math.random()*size*0.9;
+    const gx=x+Math.cos(a)*r, gy=y+Math.sin(a)*r;
+    if(!insideMask(gx,gy)) continue;
+    pctx.fillStyle = Math.random()<0.5 ? color : '#fff';
+    pctx.globalAlpha = 0.5+Math.random()*0.5;
+    pctx.beginPath(); pctx.arc(gx,gy,1+Math.random()*2,0,Math.PI*2); pctx.fill();
+  }
+  pctx.restore();
+}
+// fill the whole lantern area with the current colour (fast: paint on a temp
+// canvas, clip it to the mask shape, then composite under the existing art)
+// bucket fill from a tap point: flood the connected region, bounded by the mask
+// edge AND by the outline strokes (line-art) — so colour stays inside the frame.
+function fillArea(sx, sy){
+  const W=paint.width, H=paint.height;
+  sx=Math.floor(sx); sy=Math.floor(sy);
+  if(!insideMask(sx,sy)) return;
+  const img = pctx.getImageData(0,0,W,H), d = img.data;
+  // line-art pixels act as walls
+  const ld = lctx.getImageData(0,0,W,H).data;
+  const rgb = hexToRgb(color);
+  const at = (x,y)=>(y*W+x)*4;
+  const start = at(sx,sy);
+  const sr=d[start],sg=d[start+1],sb=d[start+2],sa=d[start+3];
+  const match = (i)=>{
+    if(Math.abs(d[i]-sr)+Math.abs(d[i+1]-sg)+Math.abs(d[i+2]-sb)+Math.abs(d[i+3]-sa) > 60) return false;
+    return true;
+  };
+  const wall = (x,y)=>{
+    if(!insideMask(x,y)) return true;             // outside shape
+    return ld[at(x,y)+3] > 40;                     // an outline stroke = boundary
+  };
+  const seen = new Uint8Array(W*H);
+  const stack=[[sx,sy]];
+  while(stack.length){
+    const [x,y]=stack.pop(); const p=y*W+x;
+    if(seen[p]) continue; seen[p]=1;
+    if(wall(x,y)) continue;
+    const i=at(x,y);
+    if(!match(i)) continue;
+    d[i]=rgb.r; d[i+1]=rgb.g; d[i+2]=rgb.b; d[i+3]=255;
+    if(x>0)stack.push([x-1,y]); if(x<W-1)stack.push([x+1,y]);
+    if(y>0)stack.push([x,y-1]); if(y<H-1)stack.push([x,y+1]);
+  }
+  pctx.putImageData(img,0,0);
+}
+function hexToRgb(h){ const n=parseInt(h.slice(1),16); return {r:(n>>16)&255,g:(n>>8)&255,b:n&255}; }
+// clip everything we draw to the lantern shape (fast: clip once per stroke)
+let last=null;
+function pushUndo(){
+  try{ undoStack.push(pctx.getImageData(0,0,paint.width,paint.height)); if(undoStack.length>12) undoStack.shift(); }catch(e){}
+}
+// --- smooth freehand ---
+// Every move we RESTORE the canvas as it was when the stroke began, then redraw
+// the ENTIRE current stroke as one continuous smooth path through all points.
+// Redrawing the whole stroke each frame guarantees a seamless line (no gaps
+// between incremental segments) and only costs one path per frame.
+let pts = [];
+let snapshot = null;    // canvas state at stroke start
+
+function pDown(e){
+  pushUndo();
+  const p=pos(e);
+  if (tool === 'fill'){          // bucket: one tap floods from that point
+    fillArea(p.x, p.y); e.preventDefault(); return;
+  }
+  drawing=true; pts=[p];
+  try { snapshot = pctx.getImageData(0,0,paint.width,paint.height); } catch(_) { snapshot=null; }
+  redrawStroke();                // a lone tap already leaves a dot
+  lines.setPointerCapture?.(e.pointerId);
+  e.preventDefault();
+}
+function pMove(e){
+  if(!drawing) return;
+  const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+  for(const ev of evs) pts.push(pos(ev));
+  redrawStroke();
+  e.preventDefault();
+}
+function pUp(e){
+  if(!drawing) return;
+  drawing=false;
+  clipToMask();          // trim anything painted outside the lantern shape
+  pts=[]; snapshot=null;
+  e.preventDefault?.();
+}
+
+// redraw the whole current stroke in one continuous path
+function redrawStroke(){
+  // glitter accumulates sparkles, so don't wipe previous frames for it
+  if(snapshot && tool!=='glitter') pctx.putImageData(snapshot,0,0);
+  applyToolStyle();
+  pctx.lineWidth=size;
+  const n=pts.length;
+  if(n===1){
+    pctx.beginPath(); pctx.arc(pts[0].x,pts[0].y,size/2,0,Math.PI*2); pctx.fill();
+  } else {
+    pctx.beginPath(); pctx.moveTo(pts[0].x,pts[0].y);
+    // quadratic through the midpoints of consecutive points = silky curve
+    for(let i=1;i<n-1;i++){
+      const mx=(pts[i].x+pts[i+1].x)/2, my=(pts[i].y+pts[i+1].y)/2;
+      pctx.quadraticCurveTo(pts[i].x,pts[i].y, mx,my);
+    }
+    pctx.lineTo(pts[n-1].x,pts[n-1].y);
+    pctx.stroke();
+  }
+  if (tool==='glitter'){ const p=pts[n-1]; sprinkle(p.x,p.y); }
+}
+
+// keep only what's inside the lantern silhouette
+function clipToMask(){
+  pctx.save();
+  pctx.globalCompositeOperation='destination-in';
+  pctx.shadowBlur=0; pctx.globalAlpha=1;
+  pctx.drawImage(maskImg,0,0,paint.width,paint.height);
+  pctx.restore();
+}
+
+lines.addEventListener('pointerdown', pDown, {passive:false});
+lines.addEventListener('pointermove', pMove, {passive:false});
+lines.addEventListener('pointerup', pUp, {passive:false});
+lines.addEventListener('pointercancel', pUp, {passive:false});
+lines.addEventListener('pointerleave', pUp, {passive:false});
+
+// tool picker
+document.querySelectorAll('.tool').forEach(btn => {
+  btn.onclick = () => {
+    tool = btn.dataset.tool;
+    document.querySelectorAll('.tool').forEach(t=>t.classList.remove('active'));
+    btn.classList.add('active');
+  };
+});
+
+document.getElementById('undo').onclick = () => {
+  const img = undoStack.pop();
+  if(img) pctx.putImageData(img,0,0);
+};
+document.getElementById('clear').onclick = () => { pushUndo(); pctx.clearRect(0,0,paint.width,paint.height); };
+
+// quay lại màn chọn mẫu (đổi mẫu khác) — cảnh báo nếu đã tô
+document.getElementById('backToPick').onclick = async () => {
+  let painted = false;
+  try { const d = pctx.getImageData(0,0,paint.width,paint.height).data;
+        for (let i=3;i<d.length;i+=4){ if(d[i]!==0){ painted=true; break; } } } catch(e){}
+  if (painted && !confirm('Đổi mẫu sẽ xoá hình đang tô. Bé có chắc không?')) return;
+  await buildPicker();
+  show('pick');
+};
+
+// ---------- 1 -> 1b (pick) ----------
+document.getElementById('startBtn').onclick = async () => {
+  childName = (document.getElementById('name').value || '').trim().slice(0,16);
+  document.getElementById('pickWho').textContent = childName ? `Chào ${childName}! 👋` : '';
+  // if a template was preset via ?t=, skip the picker
+  if (template){ loadTemplate(template); return; }
+  await buildPicker();
+  show('pick');
+};
+
+// build the template grid from the server
+async function buildPicker(){
+  const grid = document.getElementById('grid');
+  if (grid.dataset.built) return;           // build once
+  let names = [];
+  try { names = await (await fetch('/api/templates')).json(); } catch(e){}
+  if (!names.length) names = ['star'];      // fallback
+  // luôn cho "Vẽ tự do" lên đầu
+  names = names.filter(n => n !== 'tu-do');
+  names.unshift('tu-do');
+  grid.innerHTML = '';
+  for (const n of names){
+    const card = document.createElement('div');
+    card.className = 'tpl';
+    const img = document.createElement('img');
+    img.src = `/templates/${n}_lines.png`; img.alt = pretty(n);
+    const label = document.createElement('span');
+    label.textContent = pretty(n);
+    card.appendChild(img); card.appendChild(label);
+    card.onclick = () => loadTemplate(n);
+    grid.appendChild(card);
+  }
+  grid.dataset.built = '1';
+}
+
+// ---------- 2 -> 3: build image, run scan ceremony ----------
+let previewId = null;   // row id returned by /preview
+let launched = false;   // guard so the fly-away runs once
+
+document.getElementById('send').onclick = async () => {
+  const out=document.createElement('canvas'); out.width=paint.width; out.height=paint.height;
+  const o=out.getContext('2d');
+  o.drawImage(paint,0,0); o.drawImage(lines,0,0);
+  o.globalCompositeOperation='destination-in'; o.drawImage(maskImg,0,0,out.width,out.height);
+  finalImage = out.toDataURL('image/png');
+
+  document.getElementById('scanArt').src = finalImage;
+  show('scan');
+  runScanLoop();                         // animated "đang biến phép màu…"
+
+  // call AI now; when it returns, show the before/after preview
+  try {
+    const r = await fetch('/preview',{method:'POST',headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ image: finalImage, template, name: childName })});
+    const data = await r.json();
+    if(!r.ok || data.error) throw new Error(data.message||'ai failed');
+    previewId = data.id;
+    document.getElementById('pvDraw').src = finalImage;
+    document.getElementById('pvAI').src = data.ai;
+    document.getElementById('pvAI').onload = () => show('preview');
+    // if AI is off, data.ai == the drawing; still show preview for a consistent flow
+    if (!data.aiEnabled) document.getElementById('pvAI').src = finalImage, show('preview');
+  } catch(err){
+    alert('Phép màu gặp trục trặc, thử lại nhé!');
+    show('colour');
+  }
+};
+
+// looping "processing" animation (no countdown — AI takes a variable time)
+let scanTimer=null;
+function runScanLoop(){
+  const txt = document.getElementById('scanTxt');
+  const count = document.getElementById('count');
+  count.textContent='✨';
+  const msgs=['Đang biến phép màu…','AI đang vẽ lồng đèn thật…','Sắp xong rồi…'];
+  let i=0; txt.textContent=msgs[0];
+  clearInterval(scanTimer);
+  scanTimer=setInterval(()=>{ i=(i+1)%msgs.length; txt.textContent=msgs[i]; }, 2200);
+}
+function stopScanLoop(){ clearInterval(scanTimer); scanTimer=null; }
+
+// preview buttons
+document.getElementById('pvRedraw').onclick = () => { stopScanLoop(); launched=false; show('colour'); };
+// bé thích ảnh AI -> sang màn viết điều ước (chưa gửi admin)
+document.getElementById('pvOk').onclick = () => {
+  stopScanLoop();
+  document.getElementById('releaseArt').src = document.getElementById('pvAI').src;
+  startWish();
+  show('wish');
+};
+
+// ---------- 3c: điều ước (Hằng & Cuội dẫn chuyện) ----------
+const WISH_LEADS = [
+  'Chú Cuội vẫy tay: “Chào bé! Gửi điều ước lên đây, chị Hằng sẽ giữ giúp con nhé!” 🌙',
+  'Chị Hằng mỉm cười: “Đêm rằm này con ước điều gì nào? Viết ra để trăng mang đi nhé!” 💫',
+  'Chú Cuội ngồi gốc đa: “Mỗi chiếc đèn mang một điều ước bay lên trời. Điều ước của con là gì?” 🏮',
+  'Chị Hằng thì thầm: “Trăng sáng nhất đêm nay, điều ước nào cũng sẽ được lắng nghe…” ✨',
+  'Thỏ Ngọc dụi dụi: “Bé ơi, kể cho tụi mình nghe ước mơ của bé đi!” 🐰',
+];
+const wishText = document.getElementById('wishText');
+const wishCount = document.getElementById('wishCount');
+function startWish(){
+  document.getElementById('wishLead').textContent =
+    WISH_LEADS[Math.floor(Math.random()*WISH_LEADS.length)];
+  wishText.value=''; wishCount.textContent='0/140';
+}
+wishText.oninput = () => { wishCount.textContent = wishText.value.length + '/140'; };
+
+async function sendWish(wish){
+  try {
+    await fetch('/confirm',{method:'POST',headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ id: previewId, wish: wish || '' })});
+  } catch(e){}
+  show('release');
+}
+document.getElementById('wishSend').onclick = () => sendWish(wishText.value.trim());
+document.getElementById('wishSkip').onclick = () => sendWish('');
+
+// ---------- 4: swipe up to release ----------
+const releaseArt = document.getElementById('releaseArt');
+let dragY=null, startY=0;
+function rStart(e){ dragY=0; startY=(e.touches?e.touches[0]:e).clientY; e.preventDefault(); }
+function rMove(e){
+  if(dragY===null) return;
+  const y=(e.touches?e.touches[0]:e).clientY;
+  dragY = startY - y;                        // how far up
+  if(dragY>0){ releaseArt.style.transform = `translateX(-50%) translateY(${-dragY}px) scale(${1-Math.min(dragY/900,0.4)})`;
+               releaseArt.style.opacity = String(Math.max(1 - dragY/window.innerHeight*1.1, 0)); }
+  e.preventDefault();
+}
+function rEnd(){
+  if(dragY===null) return;
+  if(dragY > window.innerHeight*0.22){ launch(); }        // enough swipe -> release
+  else { releaseArt.style.transform='translateX(-50%)'; releaseArt.style.opacity='1'; }  // snap back
+  dragY=null;
+}
+for (const ev of ['mousedown','touchstart']) releaseArt.addEventListener(ev,rStart,{passive:false});
+for (const ev of ['mousemove','touchmove'])  releaseArt.addEventListener(ev,rMove,{passive:false});
+for (const ev of ['mouseup','touchend','touchcancel']) releaseArt.addEventListener(ev,rEnd);
+
+// also allow a tap-to-release fallback (some kids won't swipe)
+releaseArt.addEventListener('click', ()=>{ /* click fires after drag; ignore tiny */ });
+document.getElementById('releaseHint').addEventListener('click', launch);
+
+async function launch(){
+  if(launched) return; launched=true;
+  // fly-away animation — the row is already confirmed (in the admin queue) via /confirm
+  releaseArt.style.transition='transform .8s ease-in, opacity .8s ease-in';
+  releaseArt.style.transform='translateX(-50%) translateY(-120vh) scale(0.2)';
+  releaseArt.style.opacity='0';
+  document.getElementById('doneTitle').textContent = 'Đã gửi lồng đèn của bé! 🎉';
+  document.getElementById('doneMsg').textContent = 'Chờ duyệt một chút, lồng đèn sẽ bay lên màn hình lớn nhé!';
+  setTimeout(()=>show('done'), 800);
+}
+
+// ── floating lanterns drifting up the welcome background ──
+(function(){
+  const box = document.getElementById('floaters');
+  if(!box) return;
+  const icons = ['🏮','🌕','✨','🏮','🪔'];
+  const N = 12;
+  for(let i=0;i<N;i++){
+    const s = document.createElement('span');
+    s.textContent = icons[i % icons.length];
+    s.style.left = (Math.random()*100) + '%';
+    s.style.fontSize = (22 + Math.random()*30) + 'px';
+    s.style.animationDuration = (10 + Math.random()*10) + 's';
+    s.style.animationDelay = (-Math.random()*16) + 's';
+    s.style.opacity = 0.35 + Math.random()*0.35;
+    box.appendChild(s);
+  }
+})();
+
+// ── twinkling starfield behind welcome + pick screens ──
+document.querySelectorAll('canvas.starfield').forEach(cv => {
+  const c = cv.getContext('2d'); let W,H,stars;
+  function size(){ W=cv.width=cv.offsetWidth; H=cv.height=cv.offsetHeight;
+    stars=Array.from({length:46},()=>({x:Math.random(),y:Math.random(),r:Math.random()*1.5+0.4,tw:Math.random()*6.28,sp:0.5+Math.random()*1.6})); }
+  size(); addEventListener('resize',size);
+  (function loop(t){ if(!W){size();} c.clearRect(0,0,W,H);
+    for(const s of stars){ c.globalAlpha=0.35+0.55*Math.abs(Math.sin(t*0.001*s.sp+s.tw));
+      c.fillStyle='#fff'; c.beginPath(); c.arc(s.x*W,s.y*H,s.r,0,6.28); c.fill(); }
+    c.globalAlpha=1; requestAnimationFrame(loop); })(0);
+});
+</script>
+<style>@keyframes pop{0%{transform:translate(-50%,-50%) scale(.3);opacity:0}60%{transform:translate(-50%,-50%) scale(1.2);opacity:1}100%{transform:translate(-50%,-50%) scale(1)}}</style>
+</body>
+</html>
