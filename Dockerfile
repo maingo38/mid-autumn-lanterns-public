@@ -2,8 +2,11 @@
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
 # build tools needed to compile better-sqlite3
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      python3 make g++ ca-certificates \
+# -o Acquire::Check-Valid-Until=false + Check-Date=false: the build host's clock
+# can be skewed (seen ~3.5h fast), which otherwise makes apt reject the repo
+# Release files as "not valid yet".
+RUN apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Check-Date=false update \
+    && apt-get install -y --no-install-recommends python3 make g++ ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 COPY package*.json ./
 RUN npm ci --omit=dev
