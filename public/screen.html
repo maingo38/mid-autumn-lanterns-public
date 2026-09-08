@@ -69,7 +69,7 @@
 //  CÀI ĐẶT — chỉnh mọi thứ ở đây. Sửa số → Lưu (Cmd+S) → Refresh (Cmd+R)
 // ══════════════════════════════════════════════════════════════════
 const CONFIG = {
-  maxLanterns:   150,     // số lồng đèn tối đa trên màn (cũ nhất mờ dần khi vượt)
+  maxLanterns:   40,      // số lồng đèn tối đa trên màn (ít hơn = thoáng, không chồng)
   lanternPx:     150,     // đường kính mục tiêu mỗi lồng đèn (px) — nhỏ = chứa nhiều bé hơn
   showNames:     true,    // hiện tên bé dưới mỗi lồng đèn khi bay (bé tự tìm được đèn mình)
   spotZoom:      1.9,     // độ phóng to khi "soi" một lồng đèn — nhẹ nhàng, vừa đủ đọc
@@ -181,44 +181,63 @@ function fitScale(img){
   return (CONFIG.lanternPx / Math.max(img.width, img.height)) * rand(CONFIG.sizeMin, CONFIG.sizeMax);
 }
 
-// release a lantern into the flying sky (used after the grand entrance)
+// release a lantern into the flying sky, DEPTH-model:
+//   z = 0  -> nearest, biggest, at its foreground start point
+//   z -> 1 -> recedes toward the moon (vanishing point), shrinks & fades out
+// The newest lantern is the biggest one up front; older ones have larger z, so
+// they trail off small toward the moon — an endless flight into space.
+// DEPTH model (flying TOWARD the viewer):
+//   z = 1  -> at the moon: tiny, far away (spawn point)
+//   z = 0  -> foreground: biggest, nearest
+//   z < 0  -> drifts past the viewer and vanishes, then loops back to the moon
+// So each lantern is born small at the moon, grows as it floats out to you,
+// fades away up close, and reappears from the moon — an endless gentle stream.
+// each lantern appears small at a RANDOM point anywhere on screen, then grows
+// and drifts a little in its own random direction as it flies toward the viewer,
+// before fading out. Far point = random spot; near point = far + a random offset
+// (random heading & distance) so they scatter across the whole screen.
+function newTrack(){
+  const fx = rand(W*0.06, W*0.94), fy = rand(H*0.08, H*0.92);
+  const ang = Math.random()*Math.PI*2;
+  const dist = rand(Math.min(W,H)*0.06, Math.min(W,H)*0.22);   // random drift length
+  return {
+    farX: fx, farY: fy,
+    startX: fx + Math.cos(ang)*dist,
+    startY: fy + Math.sin(ang)*dist,
+  };
+}
 function releaseToSky(img, name, wish){
-  const speed = rand(CONFIG.speedMin, CONFIG.speedMax);
-  const heading = -Math.PI/2 + rand(-0.6,0.6);   // start heading upward
-  const target = fitScale(img);
+  const big = (Math.min(W,H)*0.20 / Math.max(img.width,img.height)) * rand(CONFIG.sizeMin, CONFIG.sizeMax);
   lanterns.push({
     img, name: name || '', wish: wish || '',
-    x: W*0.5, y: H*0.5,
-    heading, speed,
-    vx: Math.cos(heading)*speed, vy: Math.sin(heading)*speed,
-    turn: (Math.random()-0.5)*CONFIG.curve,
+    ...newTrack(),
+    z: 0.08,                           // a freshly-released one starts up front
+    zSpeed: rand(0.00055, 0.00090),    // SLOW drift toward the viewer (per frame)
     phase: Math.random()*Math.PI*2,
     drift: 0.4 + Math.random()*0.5,
     amp: rand(CONFIG.wobbleMin, CONFIG.wobbleMax),
-    spin: (Math.random()-0.5)*CONFIG.spin*2,
-    rot: 0,
-    scale: target*0.5, targetScale: target,
-    alpha: 1, targetAlpha: 1,
-    flick: Math.random()*Math.PI*2,        // candle flicker phase
+    bigScale: big,
+    spot: 0,
+    flick: Math.random()*Math.PI*2,    // candle flicker phase
+    fade: 1,
     born: performance.now()
   });
   const alive = lanterns.filter(x=>!x.leaving);
   if (alive.length > MAX){
     alive.sort((a,b)=>a.born-b.born);
-    const old = alive[0];
-    old.leaving = true; old.targetAlpha = 0; old.targetScale = 0.02;
+    alive[0].leaving = true;           // oldest starts fading out
   }
 }
 
-// add an OLD lantern straight into the sky (no ceremony) — used on page load
+// add an OLD lantern straight into the sky (no ceremony) — used on page load.
+// Spread them across depths so the sky looks already-populated, not all up front.
 function addQuiet(rec){
   const img = new Image();
   img.onload = () => {
     releaseToSky(img, rec.name, rec.wish);
     const last = lanterns[lanterns.length-1];
-    last.x = Math.random()*W*0.8 + W*0.1;
-    last.y = Math.random()*H*0.7 + H*0.12;
-    last.scale = last.targetScale;
+    last.z = Math.random();            // scattered through space (moon → foreground)
+    last.phase = Math.random()*Math.PI*2;
   };
   img.src = '/lanterns/' + rec.file;
 }
@@ -358,8 +377,20 @@ function drawEntrance(t){
   ctx.shadowBlur=0; ctx.globalAlpha=1;
 }
 
-// load whatever already exists (so restarting the screen doesn't lose the wall)
-fetch('/api/recent').then(r=>r.json()).then(list => list.forEach(addQuiet));
+// load whatever already exists (so restarting the screen doesn't lose the wall).
+// stagger their depth EVENLY across the flight so they don't stack on one layer.
+fetch('/api/recent').then(r=>r.json()).then(list => {
+  list.forEach((rec, i) => {
+    const img = new Image();
+    img.onload = () => {
+      releaseToSky(img, rec.name, rec.wish);
+      const last = lanterns[lanterns.length-1];
+      last.z = (i + 0.5) / Math.max(1, list.length);   // spread 0..1 evenly
+      last.phase = Math.random()*Math.PI*2;
+    };
+    img.src = '/lanterns/' + rec.file;
+  });
+});
 
 // live updates -> grand entrance
 const socket = io();
@@ -591,63 +622,65 @@ function frame(t){
   if (CONFIG.showClouds)    drawClouds(t);
   if (CONFIG.showMoon)      drawMoon(t);
 
-  for (let i=lanterns.length-1;i>=0;i--){
-    const l = lanterns[i];
+  // draw far → near so nearer (bigger) lanterns overlap on top.
+  // far = large z (near the moon); sort descending so near ones draw last.
+  const order = lanterns.map((l,i)=>({l,i})).sort((a,b)=> b.l.z - a.l.z);
+  for (const {l, i} of order){
     const isSpot = (l === spotlight);
-    // ease a 0..1 "spotlight" factor for a gentle, dreamy zoom in/out
     l.spot = (l.spot||0) + ((isSpot?1:0) - (l.spot||0)) * CONFIG.spotEase;
 
-    // ease scale & alpha toward target
-    l.scale += (l.targetScale - l.scale)*0.06;
-    l.alpha += (l.targetAlpha - l.alpha)*CONFIG.fadeInSpeed;
-    // wander — but a spotlighted lantern nearly freezes so it's easy to read
-    const moveMul = 1 - l.spot*0.92;
+    // drift OUT toward the viewer: z decreases (spotlighted one nearly pauses)
+    if (!isSpot) l.z -= l.zSpeed * (1 - l.spot*0.96);
+    // once it has drifted past the viewer, loop back to the moon on a fresh track
+    if (l.z <= -0.28){
+      if (l.leaving){ l._dead = true; }
+      else { l.z = 1; Object.assign(l, newTrack()); l.phase = Math.random()*Math.PI*2; }
+    }
     l.phase += 0.02*l.drift;
-    l.heading += l.turn + Math.sin(l.phase*0.5)*0.006;
-    if (Math.sin(l.phase*0.13) > 0.995) l.turn = (Math.random()-0.5)*CONFIG.curve;
-    l.vx = Math.cos(l.heading)*l.speed;
-    l.vy = Math.sin(l.heading)*l.speed;
-    l.x += l.vx*moveMul;
-    l.y += l.vy*moveMul;
-    const m = CONFIG.edgeMargin;
-    if (l.x < m)      l.heading = Math.atan2(l.vy,  Math.abs(l.vx));
-    if (l.x > W - m)  l.heading = Math.atan2(l.vy, -Math.abs(l.vx));
-    if (l.y < m)      l.heading = Math.atan2( Math.abs(l.vy), l.vx);
-    if (l.y > H - m)  l.heading = Math.atan2(-Math.abs(l.vy), l.vx);
-    const wobbleX = Math.sin(l.phase)*l.amp*(1-l.spot);
-    const wobbleY = Math.cos(l.phase*0.8)*l.amp*0.5*(1-l.spot);
-    l.rot += l.spin;
-    const rot = (l.rot + Math.sin(l.phase)*0.05) * (1-l.spot);   // straighten when spotlighted
+
+    // perspective: pp grows as z shrinks. z=1(moon)→~0 tiny; z=0→1; z<0→>1 huge.
+    const pp = Math.max(0, 1 - l.z);
+    // lerp this lantern's OWN far point → OWN near point as it flies out (t: 0..1)
+    const t01 = 1 - l.z;
+    const fx = (l.farX!=null?l.farX:vpX()), fy = (l.farY!=null?l.farY:vpY());
+    const cx = fx + (l.startX - fx)*t01 + Math.sin(l.phase)*l.amp*pp*(1-l.spot);
+    const cy = fy + (l.startY - fy)*t01 + Math.cos(l.phase*0.8)*l.amp*0.5*pp*(1-l.spot);
+
+    // alpha: fade in just after leaving the moon, fade out as it passes the viewer
+    const appear = Math.min(1, (1 - l.z)/0.12);        // 0 at moon → 1 shortly after
+    const vanish = Math.min(1, Math.max(0, (l.z + 0.28)/0.30));  // 1 until z<0 → 0 at -0.28
+    // distant lanterns dimmer than near ones → clearer depth layering, less clutter
+    const depthDim = 0.35 + 0.65*pp;
+    const alpha = Math.max(0, Math.min(1, appear * vanish * depthDim * l.fade));
 
     const zoom = 1 + l.spot*(CONFIG.spotZoom-1);
-    const iw = l.img.width*l.scale*zoom, ih = l.img.height*l.scale*zoom;
-    const cx = l.x+wobbleX, cy = l.y+wobbleY;
-    // remember footprint for hit-testing (use un-zoomed radius so it's easy to grab)
-    l._cx = l.x; l._cy = l.y; l._r = Math.max(l.img.width,l.img.height)*l.scale*0.5;
+    const scale = l.bigScale * pp * zoom;
+    const iw = l.img.width*scale, ih = l.img.height*scale;
+    // hit-testing footprint
+    l._cx = cx; l._cy = cy; l._r = Math.max(l.img.width,l.img.height)*scale*0.5;
 
     ctx.save();
-    ctx.globalAlpha = Math.max(0,Math.min(1,l.alpha));
+    ctx.globalAlpha = alpha;
     ctx.translate(cx, cy);
-    ctx.rotate(rot);
-    // candle flicker glow (stronger while spotlighted)
-    if (CONFIG.candleFlicker){
+    ctx.rotate(Math.sin(l.phase)*0.05*(1-l.spot));
+    if (CONFIG.candleFlicker && ih > 8){
       l.flick += 0.15 + Math.random()*0.1;
       const fl = 0.6 + 0.4*Math.sin(l.flick) + (Math.random()-0.5)*0.15;
       ctx.save(); ctx.globalCompositeOperation='lighter';
       const gl = ctx.createRadialGradient(0,0,0, 0,0,ih*0.6);
-      gl.addColorStop(0, `rgba(255,190,90,${(0.35+l.spot*0.4)*fl*l.alpha})`);
+      gl.addColorStop(0, `rgba(255,190,90,${(0.35+l.spot*0.4)*fl*alpha})`);
       gl.addColorStop(1, 'rgba(255,190,90,0)');
       ctx.fillStyle=gl; ctx.beginPath(); ctx.arc(0,0,ih*0.6,0,Math.PI*2); ctx.fill();
       ctx.restore();
     }
-    ctx.shadowColor = CONFIG.glowColor; ctx.shadowBlur = CONFIG.glowSize + l.spot*30;
+    ctx.shadowColor = CONFIG.glowColor; ctx.shadowBlur = (CONFIG.glowSize + l.spot*30)*pp;
     ctx.drawImage(l.img, -iw/2, -ih/2, iw, ih);
     ctx.restore();
 
-    // name tag under the lantern (grows a bit with spotlight)
-    if (CONFIG.showNames && l.name && l.spot < 0.5){
+    // name tag under the lantern — only while reasonably near (readable)
+    if (CONFIG.showNames && l.name && l.spot < 0.5 && pp > 0.45){
       ctx.save();
-      ctx.globalAlpha = Math.max(0,Math.min(1,l.alpha))*0.9*(1-l.spot*2>0?1-l.spot*2:0);
+      ctx.globalAlpha = alpha*0.9;
       ctx.translate(cx, cy + ih*0.62);
       ctx.textAlign='center';
       ctx.font=`600 ${Math.max(11, Math.round(ih*0.12))}px system-ui,sans-serif`;
@@ -674,8 +707,11 @@ function frame(t){
       }
       ctx.restore();
     }
+  }
 
-    if (l.leaving && l.alpha < 0.02) lanterns.splice(i,1);   // fully gone
+  // remove lanterns flagged dead (leaving ones that have passed the viewer)
+  for (let i=lanterns.length-1;i>=0;i--){
+    if (lanterns[i]._dead) lanterns.splice(i,1);
   }
 
   if (CONFIG.water) drawWater(t);

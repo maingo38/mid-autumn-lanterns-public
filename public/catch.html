@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Bat Tho Ngoc</title>
+<style>
+  :root{ --gold:#ffd77a; --gold2:#ffe9b0; --deep:#0a0620; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-user-select:none; user-select:none; }
+  body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    color:#fff; background:radial-gradient(130% 100% at 50% -10%, #2a1a5e 0%, var(--deep) 58%, #05030f 100%);
+    min-height:100vh; overflow:hidden; text-align:center; display:flex; flex-direction:column; align-items:center; }
+  h1{ margin:18px 16px 2px; font-size:clamp(22px,5.4vw,32px); font-weight:800; position:relative; z-index:3;
+    background:linear-gradient(180deg,#fff6e2,var(--gold) 55%,#ff8c1a);
+    -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .sub{ color:#cbb8ff; font-size:13px; margin:0 20px; position:relative; z-index:3; max-width:340px; }
+  .hud{ position:relative; z-index:3; display:flex; gap:18px; margin-top:8px; font-weight:800; }
+  .hud .box{ background:#241542; border:1.5px solid rgba(255,215,120,.3); border-radius:12px; padding:8px 16px; }
+  .hud .box span{ color:var(--gold2); }
+
+  .arena{ position:relative; z-index:2; width:min(94vw,420px); flex:1; margin:12px 0; border-radius:20px;
+    background:radial-gradient(circle at 50% 20%, #241348, #160c2e); border:2px solid rgba(255,215,120,.25);
+    overflow:hidden; box-shadow:inset 0 0 40px rgba(0,0,0,.5); touch-action:manipulation; }
+  .target{ position:absolute; font-size:46px; cursor:pointer; transition:transform .08s;
+    filter:drop-shadow(0 4px 10px rgba(0,0,0,.4)); }
+  .target:active{ transform:scale(.8); }
+
+  .b{ position:relative; z-index:3; margin:10px 0 4px; border:none; cursor:pointer; font-size:20px; font-weight:800; color:#fff;
+    padding:15px 44px; border-radius:999px; background:radial-gradient(circle at 50% 26%, #ffa63d, #ff8c1a 40%, #b5340c);
+    box-shadow:0 8px 24px rgba(255,120,20,.6); transition:transform .12s; }
+  .b:active{ transform:scale(.95); }
+  .b:disabled{ background:radial-gradient(circle at 50% 26%,#6b5a2a,#3a2f12); box-shadow:none; opacity:.7; }
+  .result{ position:relative; z-index:3; margin:8px 16px; min-height:24px; font-size:18px; font-weight:800; color:var(--gold); }
+  .backlink{ display:inline-block; margin:4px 0 16px; color:#cbb8ff; text-decoration:none; font-weight:700; position:relative; z-index:3;
+    border:1px solid rgba(255,215,120,.3); border-radius:999px; padding:9px 20px; }
+  .confetti{ position:fixed; top:-10px; font-size:22px; z-index:60; pointer-events:none; animation:fall linear forwards; }
+  @keyframes fall{ to{ transform:translateY(110vh) rotate(360deg); opacity:0; } }
+</style>
+</head>
+<body>
+  <h1>🐰 Chốt Deal Bắt Thỏ</h1>
+  <div class="sub">Chạm bắt thỏ &amp; bánh trong 12 giây — càng nhiều càng nhiều lửa! (Tránh 💣)</div>
+  <div class="hud">
+    <div class="box">⏱️ <span id="time">12</span>s</div>
+    <div class="box">🎯 <span id="score">0</span></div>
+    <div class="box">🔥 <span id="bal">…</span></div>
+  </div>
+
+  <div class="arena" id="arena"></div>
+
+  <button class="b" id="go">Bắt đầu!</button>
+  <div class="result" id="result"></div>
+  <a class="backlink" href="/hub">← Về trang chính</a>
+
+  <script>
+    const arena = document.getElementById('arena');
+    const timeEl = document.getElementById('time');
+    const scoreEl = document.getElementById('score');
+    const balEl = document.getElementById('bal');
+    const goBtn = document.getElementById('go');
+    const resultEl = document.getElementById('result');
+
+    const DURATION = 12;          // seconds
+    const GOODS = ['🐰','🥮','🏮','🌕'];
+    const BOMB = '💣';
+    let playedToday = false, running = false, score = 0, spawnTimer = null, tickTimer = null;
+
+    async function loadWallet(){
+      const r = await (await fetch('/api/wallet')).json();
+      if (!r.wallet){ location.href = '/'; return; }
+      playedToday = !r.wallet.canCatch;
+      balEl.textContent = r.wallet.balance;
+      if (playedToday){ goBtn.disabled = true; goBtn.textContent = 'Đã chơi hôm nay 🌙';
+        if(!resultEl.textContent) resultEl.textContent = 'Mai quay lại bắt tiếp nhé!'; }
+    }
+
+    function spawn(){
+      const isBomb = Math.random() < 0.2;
+      const el = document.createElement('div');
+      el.className = 'target';
+      el.textContent = isBomb ? BOMB : GOODS[Math.floor(Math.random()*GOODS.length)];
+      const pad = 40;
+      const x = pad + Math.random()*(arena.clientWidth - pad*2);
+      const y = pad + Math.random()*(arena.clientHeight - pad*2);
+      el.style.left = x + 'px'; el.style.top = y + 'px';
+      el.addEventListener('click', ()=>{
+        if (!running) return;
+        if (isBomb){ score = Math.max(0, score-2); flash('#ff6b6b'); }
+        else { score++; }
+        scoreEl.textContent = score;
+        el.remove();
+      }, { once:true });
+      arena.appendChild(el);
+      setTimeout(()=>el.remove(), 1100);   // disappears if not tapped
+    }
+    function flash(c){ arena.style.boxShadow = 'inset 0 0 40px ' + c; setTimeout(()=>arena.style.boxShadow='', 150); }
+
+    async function start(){
+      if (running || playedToday) return;
+      running = true; score = 0; scoreEl.textContent = '0';
+      goBtn.disabled = true; resultEl.textContent = '';
+      let left = DURATION; timeEl.textContent = left;
+      spawnTimer = setInterval(spawn, 620);
+      tickTimer = setInterval(()=>{ left--; timeEl.textContent = left; if(left<=0) finish(); }, 1000);
+    }
+
+    async function finish(){
+      running = false;
+      clearInterval(spawnTimer); clearInterval(tickTimer);
+      arena.querySelectorAll('.target').forEach(e=>e.remove());
+      // map catches to a 0..100 score. ~15 catches in 12s = full.
+      const s = Math.max(0, Math.min(100, Math.round(score/15*100)));
+      try {
+        const resp = await fetch('/api/catch/win', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ score: s }) });
+        if (resp.status === 401){ location.href = '/'; return; }
+        const r = await resp.json();
+        if (resp.ok){ resultEl.textContent = `🎉 Bắt được ${score}! Nhận ${r.reward} lửa 🔥`; balEl.textContent = r.wallet.balance; confetti(); paintDone(); showCheer({delay:1000}); }
+        else { resultEl.textContent = 'Bạn đã chơi hôm nay rồi 🌙'; if(r.wallet) balEl.textContent = r.wallet.balance; paintDone(); }
+      } catch(e){ resultEl.textContent = 'Lỗi kết nối, thử lại nhé!'; goBtn.disabled = false; }
+    }
+    function paintDone(){ playedToday = true; goBtn.disabled = true; goBtn.textContent = 'Đã chơi hôm nay 🌙'; }
+
+    function confetti(){
+      const icons = ['🐰','🥮','🏮','🔥','🌟'];
+      for (let i=0;i<20;i++){
+        const c = document.createElement('div');
+        c.className='confetti'; c.textContent = icons[i%icons.length];
+        c.style.left = Math.random()*100+'vw';
+        c.style.animationDuration = (1.4+Math.random()*1.4)+'s';
+        c.style.animationDelay = (Math.random()*0.4)+'s';
+        document.body.appendChild(c); setTimeout(()=>c.remove(), 3200);
+      }
+    }
+
+    goBtn.addEventListener('click', start);
+    loadWallet();
+    window.addEventListener('pageshow', loadWallet);
+  </script>
+<script src="/cheer.js"></script>
+</body>
+</html>

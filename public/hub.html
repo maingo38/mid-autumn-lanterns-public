@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Trung Thu - Trang chinh</title>
+<style>
+  :root{ --gold:#ffd77a; --gold2:#ffe9b0; --deep:#0a0620; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-user-select:none; user-select:none; }
+  body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    color:#fff; background:radial-gradient(130% 100% at 50% -10%, #2a1a5e 0%, var(--deep) 58%, #05030f 100%);
+    min-height:100vh; overflow-x:hidden; display:flex; flex-direction:column; align-items:center; }
+  body::after{ content:''; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.5;
+    background-image:radial-gradient(1.5px 1.5px at 20% 30%, #fff, transparent), radial-gradient(1.5px 1.5px at 70% 20%, #fff, transparent), radial-gradient(1px 1px at 40% 60%, #fff, transparent), radial-gradient(1.5px 1.5px at 85% 55%, #fff, transparent);
+    background-repeat:no-repeat; }
+  .wrap{ position:relative; z-index:2; width:100%; max-width:440px; padding:22px 16px calc(30px + env(safe-area-inset-bottom)); }
+
+  .top{ display:flex; align-items:center; gap:12px; margin-bottom:14px; }
+  .avatar{ width:44px; height:44px; border-radius:50%; border:2px solid var(--gold); object-fit:cover; flex:0 0 auto; background:#241542; }
+  .hi{ flex:1; min-width:0; }
+  .hi .name{ font-weight:800; font-size:16px; color:var(--gold2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .hi .bal{ font-size:14px; color:#ffbe6b; font-weight:700; }
+  .logout{ font-size:12px; color:#cbb8ff; text-decoration:none; border:1px solid rgba(255,215,120,.3); border-radius:999px; padding:6px 12px; flex:0 0 auto; }
+
+  h1{ text-align:center; margin:8px 0 16px; font-size:clamp(22px,5.4vw,30px); font-weight:800;
+    background:linear-gradient(180deg,#fff6e2,var(--gold) 55%,#ff8c1a);
+    -webkit-background-clip:text; background-clip:text; color:transparent; text-shadow:0 0 30px rgba(255,180,80,.25); }
+
+  /* two main tabs: rank + spin */
+  .tabs{ display:flex; gap:12px; margin-bottom:18px; }
+  .tab{ flex:1; text-decoration:none; color:#fff; border-radius:20px; padding:20px 14px; text-align:center;
+    box-shadow:0 10px 26px rgba(0,0,0,.4); transition:transform .12s; position:relative; overflow:hidden; }
+  .tab:active{ transform:scale(.96); }
+  .tab .ic{ font-size:40px; display:block; margin-bottom:6px; filter:drop-shadow(0 3px 10px rgba(0,0,0,.4)); }
+  .tab .t{ font-size:17px; font-weight:800; }
+  .tab .s{ font-size:12px; opacity:.85; margin-top:2px; }
+  .tab.rank{ background:linear-gradient(180deg,#3a2470,#241348); border:1.5px solid rgba(255,215,120,.4); }
+  .tab.spin{ background:radial-gradient(circle at 50% 20%, #ffa63d, #ff8c1a 45%, #b5340c); }
+  .tab .badge{ position:absolute; top:8px; right:10px; font-size:11px; font-weight:800; background:#fff; color:#b5340c;
+    padding:2px 8px; border-radius:999px; }
+
+  .section{ font-size:13px; color:#cbb8ff; font-weight:700; margin:6px 4px 10px; text-transform:uppercase; letter-spacing:.5px; }
+  /* 5 game cards */
+  .games{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .game{ text-decoration:none; color:#ffe9b0; border-radius:18px; padding:16px 12px; text-align:center;
+    background:linear-gradient(180deg,#ffffff14,#ffffff08); border:1.5px solid rgba(255,215,120,.22);
+    box-shadow:0 6px 16px #0004; transition:transform .12s, border-color .15s; position:relative; }
+  .game:active{ transform:scale(.95); }
+  .game:hover{ border-color:#ffd166; }
+  .game .ic{ font-size:34px; display:block; margin-bottom:6px; filter:drop-shadow(0 0 8px #ffb84daa); }
+  .game .t{ font-size:14px; font-weight:800; }
+  .game.done{ opacity:.6; }
+  .game .tick{ position:absolute; top:8px; right:10px; font-size:12px; font-weight:800; color:#9be29b; }
+  .game:last-child:nth-child(odd){ grid-column:1 / -1; }   /* 5th card spans full width */
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <img class="avatar" id="avatar" alt="">
+      <div class="hi">
+        <div class="name" id="uname">…</div>
+        <div class="bal" id="bal">🔥 … lửa</div>
+      </div>
+      <a class="logout" id="logout" href="#">Đăng xuất</a>
+    </div>
+
+    <h1>🏮 Vui Tết Trung Thu 🏮</h1>
+
+    <div class="tabs">
+      <a class="tab rank" href="/rank">
+        <span class="ic">🏆</span>
+        <div class="t">Bảng xếp hạng</div>
+        <div class="s" id="rankSub">Xem vị trí của bạn</div>
+      </a>
+      <a class="tab spin" href="/spin">
+        <span class="ic">🎡</span>
+        <div class="t">Quay Số May Rủi Như Chờ Lương</div>
+        <div class="s">Quay nhận lửa</div>
+        <span class="badge" id="spinBadge" style="display:none">Mới!</span>
+      </a>
+    </div>
+
+    <div class="section">🎮 Mini game — chơi mỗi ngày nhận lửa</div>
+    <div class="games" id="games"></div>
+  </div>
+
+  <script>
+    const GAMES = [
+      { key:'shake',   href:'/shake',   ic:'🏮', t:'Lắc Đi Cho Hết Căng' },
+      { key:'quiz',    href:'/quiz',    ic:'🥮', t:'Nhân Bánh Là Nhân Viên Nào?' },
+      { key:'puzzle',  href:'/puzzle',  ic:'🥮', t:'Lăn Bánh Né Hố Như Né Họp' },
+      { key:'fortune', href:'/fortune', ic:'🔥', t:'Giữ Lửa Như Giữ Job' },
+      { key:'catch',   href:'/catch',   ic:'🐰', t:'Chốt Deal Bắt Thỏ' },
+    ];
+    const canKey = { shake:'canShake', quiz:'canQuiz', puzzle:'canPuzzle', fortune:'canFortune', catch:'canCatch' };
+
+    async function init(){
+      let me = null, w = null;
+      try { const r = await (await fetch('/api/me')).json(); me = r.user; } catch(e){}
+      if (!me){ location.href = '/'; return; }
+      document.getElementById('uname').textContent = me.name || me.email || 'Bạn';
+      if (me.picture) document.getElementById('avatar').src = me.picture;
+      try { const r = await (await fetch('/api/wallet')).json(); w = r.wallet; } catch(e){}
+      if (w){
+        document.getElementById('bal').textContent = '🔥 ' + w.balance + ' lửa';
+        if (w.canSpin) document.getElementById('spinBadge').style.display = '';
+      }
+      renderGames(w || {});
+    }
+
+    function renderGames(w){
+      const box = document.getElementById('games');
+      box.innerHTML = GAMES.map(g=>{
+        const done = w[canKey[g.key]] === false;   // already played today
+        return `<a class="game ${done?'done':''}" href="${g.href}">
+          ${done?'<span class="tick">✓ hôm nay</span>':''}
+          <span class="ic">${g.ic}</span>
+          <div class="t">${g.t}</div>
+        </a>`;
+      }).join('');
+    }
+
+    document.getElementById('logout').addEventListener('click', async (e)=>{
+      e.preventDefault();
+      try { await fetch('/api/auth/logout', { method:'POST' }); } catch(e){}
+      location.href = '/';
+    });
+
+    init();
+    window.addEventListener('pageshow', init);   // refresh when coming back from a game
+  </script>
+</body>
+</html>

@@ -259,17 +259,30 @@
   #wishLanterns span:nth-child(3n){ animation-delay:-1.2s; font-size:22px; }
   @keyframes hangSway{ 0%,100%{ transform:rotate(-7deg) translateY(0) } 50%{ transform:rotate(7deg) translateY(-4px) } }
 </style>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 
+<!-- ========== 0. LOGIN (Google) ========== -->
+<div class="scene on" id="login" style="align-items:center;justify-content:center;text-align:center;padding:28px;position:relative;">
+  <canvas class="starfield"></canvas>
+  <div style="position:relative;z-index:1;width:100%;max-width:340px;">
+    <div class="moon" style="font-size:80px;filter:drop-shadow(0 0 30px #ffd77a);">🌕</div>
+    <h1 style="font-size:26px;margin:16px 0 6px;font-weight:900;background:linear-gradient(90deg,#ffe9b0,#ffd166,#ff8c1a);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;">Lồng Đèn Trung Thu</h1>
+    <p style="color:#c9b8ff;margin:0 0 24px;font-size:15px;line-height:1.5;">Đăng nhập bằng tài khoản Google để làm lồng đèn của riêng bạn và tham gia bình chọn 🏮</p>
+    <div id="gbtn" style="display:flex;justify-content:center;"></div>
+    <div id="loginErr" style="color:#ff9a9a;font-size:13px;margin-top:14px;min-height:18px;"></div>
+  </div>
+</div>
+
 <!-- ========== 1. WELCOME ========== -->
-<div class="scene on" id="welcome">
+<div class="scene" id="welcome">
   <canvas class="starfield"></canvas>
   <div class="floaters" id="floaters"></div>
   <div class="moon">🌕</div>
-  <h1>Bé ơi, cùng làm lồng đèn nhé!</h1>
+  <h1>Cùng làm lồng đèn nhé!</h1>
   <p>Tô màu thật đẹp rồi thả lên bầu trời 🏮</p>
-  <input id="name" placeholder="Tên của bé (không bắt buộc)" maxlength="16">
+  <input id="name" placeholder="Tên hiển thị (không bắt buộc)" maxlength="16">
   <button class="big" id="startBtn">Tiếp tục ✨</button>
 </div>
 
@@ -381,6 +394,10 @@
   <h2 id="relTitle">Thả lồng đèn lên bầu trời</h2>
   <div id="relHalo"></div>
   <img id="releaseArt">
+  <label id="relAgree" style="position:absolute;bottom:15%;width:100%;max-width:340px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:flex-start;padding:0 20px;color:#ffe9b0;font-size:13px;line-height:1.4;text-align:left;z-index:2;cursor:pointer;">
+    <input type="checkbox" id="relCheck" style="width:20px;height:20px;flex:0 0 auto;margin-top:1px;accent-color:#ff8c1a;">
+    <span>Tôi hiểu mỗi người chỉ được thả <b>1 lồng đèn duy nhất</b> và <b>không thể thay đổi</b> sau khi thả.</span>
+  </label>
   <div id="releaseHint"><span class="pill"><span class="arrow">⬆️</span> Vuốt lên để thả đèn</span></div>
 </div>
 
@@ -388,8 +405,21 @@
 <div class="scene" id="done">
   <div class="up">🏮</div>
   <h2 id="doneTitle">Lồng đèn của bé đang bay! 🎉</h2>
-  <p id="doneMsg">Nhìn lên màn hình lớn để tìm lồng đèn của mình nhé!</p>
-  <button class="big" onclick="location.reload()">Làm cái mới</button>
+  <p id="doneMsg">Giờ hãy vào trang chơi để bình chọn và chơi mini game nhận lửa nhé!</p>
+  <button class="big" onclick="location.href='/hub'">🎮 Vào trang chơi</button>
+</div>
+
+<!-- ========== 6. MY LANTERN (device already has one) ========== -->
+<div class="scene" id="mine" style="align-items:center;justify-content:center;text-align:center;padding:24px;position:relative;">
+  <canvas class="starfield"></canvas>
+  <div style="position:relative;z-index:1;width:100%;max-width:360px;">
+    <h2 style="font-size:23px;font-weight:900;margin:0 0 6px;background:linear-gradient(90deg,#ffe9b0,#ffd166,#ff8c1a);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;">Lồng đèn của bé 🏮</h2>
+    <p style="color:#c9b8ff;margin:0 0 16px;font-size:14px;">Mỗi bé chỉ làm 1 lồng đèn thôi nhé. Cùng đi cổ vũ các bạn khác!</p>
+    <img id="mineArt" style="width:70%;max-width:240px;aspect-ratio:1;object-fit:contain;filter:drop-shadow(0 0 30px #ffd77a);">
+    <div id="mineWish" style="color:#ffd77a;font-weight:700;margin:12px 0 4px;font-size:15px;min-height:20px;"></div>
+    <div id="mineStats" style="color:#ffe9b0;font-weight:800;margin:8px 0 16px;font-size:16px;"></div>
+    <button class="big" style="margin-top:0;" onclick="location.href='/hub'">🎮 Vào trang chơi</button>
+  </div>
 </div>
 
 <script>
@@ -397,6 +427,9 @@ const params = new URLSearchParams(location.search);
 let template = params.get('t') || null;   // may be preset via ?t=, else chosen in the picker
 let childName = '';
 let finalImage = null;
+
+// identity now comes from Google sign-in (server session cookie), not localStorage.
+let me = null;   // { sub, email, name, picture } once signed in
 
 // nice display names for known templates (fallback: prettified slug)
 const NAMES = {
@@ -412,6 +445,61 @@ const show = id => {
   document.querySelectorAll('.scene').forEach(s => s.classList.remove('on'));
   document.getElementById(id).classList.add('on');
 };
+
+// this device already released a lantern -> show it (art + wish + fires/rank)
+// instead of letting the child draw another. Returns true if one was found.
+async function showMyLantern(){
+  try {
+    const r = await (await fetch('/api/my-lantern')).json();
+    if (!r.lantern) return false;
+    const L = r.lantern;
+    document.getElementById('mineArt').src = '/lanterns/' + L.file;
+    document.getElementById('mineWish').textContent = L.wish ? '“' + L.wish + '”' : '';
+    document.getElementById('mineStats').textContent = `🔥 ${L.fires} lửa  ·  Hạng #${L.rank}`;
+    show('mine');
+    return true;
+  } catch(e){ return false; }
+}
+
+// ---------- Google sign-in gate ----------
+// on load: ask the server who we are. Signed in -> skip to their lantern or the
+// welcome/draw flow. Not signed in -> render the Google button on the login scene.
+async function initAuth(){
+  let clientId = null;
+  try {
+    const r = await (await fetch('/api/me')).json();
+    me = r.user; clientId = r.clientId;
+  } catch(e){}
+  if (me){ afterLogin(); return; }
+  // render the Google button; GIS may still be loading, so poll briefly
+  let tries = 0;
+  (function renderBtn(){
+    if (window.google && google.accounts && google.accounts.id){
+      google.accounts.id.initialize({ client_id: clientId, callback: onGoogleCredential });
+      google.accounts.id.renderButton(document.getElementById('gbtn'),
+        { theme:'filled_blue', size:'large', shape:'pill', text:'signin_with', locale:'vi' });
+    } else if (tries++ < 40){ setTimeout(renderBtn, 150); }
+    else { document.getElementById('loginErr').textContent = 'Không tải được đăng nhập Google. Thử tải lại trang.'; }
+  })();
+}
+async function onGoogleCredential(resp){
+  try {
+    const r = await fetch('/api/auth/google', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ credential: resp.credential }) });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'login failed');
+    me = data.user;
+    afterLogin();
+  } catch(e){ document.getElementById('loginErr').textContent = 'Đăng nhập thất bại, thử lại nhé!'; }
+}
+// after we know who the user is: their lantern, or the welcome/draw flow
+async function afterLogin(){
+  if (me && me.name && !document.getElementById('name').value)
+    document.getElementById('name').value = (me.name || '').slice(0,16);
+  const has = await showMyLantern();
+  if (!has) show('welcome');
+}
+initAuth();
 
 // ---------- colouring setup ----------
 const paint = document.getElementById('paint');
@@ -798,6 +886,7 @@ document.getElementById('send').onclick = async () => {
     const r = await fetch('/preview',{method:'POST',headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ image: finalImage, template, name: childName })});
     const data = await r.json();
+    if (r.status === 409 && data.error === 'already_have'){ stopScanLoop(); showMyLantern(); return; }
     if(!r.ok || data.error) throw new Error(data.message||'ai failed');
     previewId = data.id;
     document.getElementById('pvDraw').src = finalImage;
@@ -888,12 +977,24 @@ releaseArt.addEventListener('click', ()=>{ /* click fires after drag; ignore tin
 document.getElementById('releaseHint').addEventListener('click', launch);
 
 async function launch(){
-  if(launched) return; launched=true;
+  if(launched) return;
+  // must tick the "1 lantern only, no changes" disclaimer first
+  if(!document.getElementById('relCheck').checked){
+    const lbl = document.getElementById('relAgree');
+    lbl.style.color = '#ff9a9a'; setTimeout(()=>lbl.style.color='#ffe9b0', 1200);
+    return;
+  }
+  launched=true;
   // GIỜ mới thả lên /screen
   try {
-    await fetch('/release',{method:'POST',headers:{'Content-Type':'application/json'},
+    const rr = await fetch('/release',{method:'POST',headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ id: previewId })});
-  } catch(e){}
+    if(!rr.ok){ launched=false; const e=await rr.json().catch(()=>({}));
+      if(e.error==='already_have'){ alert('Bạn đã có một lồng đèn rồi nhé!'); showMyLantern(); }
+      else alert('Không thả được, thử lại nhé!');
+      return;
+    }
+  } catch(e){ launched=false; alert('Lỗi kết nối, thử lại nhé!'); return; }
   // fly-away animation
   releaseArt.style.transition='transform .8s ease-in, opacity .8s ease-in';
   releaseArt.style.transform='translateX(-50%) translateY(-120vh) scale(0.2)';
@@ -933,6 +1034,15 @@ document.querySelectorAll('canvas.starfield').forEach(cv => {
     c.globalAlpha=1; requestAnimationFrame(loop); })(0);
 });
 </script>
-<style>@keyframes pop{0%{transform:translate(-50%,-50%) scale(.3);opacity:0}60%{transform:translate(-50%,-50%) scale(1.2);opacity:1}100%{transform:translate(-50%,-50%) scale(1)}}</style>
+<style>@keyframes pop{0%{transform:translate(-50%,-50%) scale(.3);opacity:0}60%{transform:translate(-50%,-50%) scale(1.2);opacity:1}100%{transform:translate(-50%,-50%) scale(1)}}
+/* mini-game menu shown after releasing a lantern / on return visits */
+.gameMenu{ display:flex; flex-direction:column; gap:10px; width:100%; max-width:320px; margin:6px auto 0; }
+.gameMenu a{ display:flex; align-items:center; gap:12px; text-decoration:none; padding:14px 18px; border-radius:16px;
+  font-size:16px; font-weight:800; color:#ffe9b0; background:linear-gradient(180deg,#ffffff14,#ffffff08);
+  border:1.5px solid #ffd16644; box-shadow:0 4px 14px #0004; transition:transform .12s, border-color .15s, background .15s; }
+.gameMenu a:active{ transform:scale(.97); }
+.gameMenu a:hover{ border-color:#ffd166; background:rgba(255,209,102,.14); }
+.gameMenu a span{ font-size:24px; flex:0 0 auto; filter:drop-shadow(0 0 8px #ffb84daa); }
+.gameMenu a:first-child{ background:linear-gradient(90deg,#ffd166,#ff9a1a); color:#3a1500; border-color:transparent; }</style>
 </body>
 </html>

@@ -6,7 +6,13 @@ server.log
 
 # runtime data — regenerated at runtime, kept in docker volumes
 lanterns.db
+lanterns.db.bak*
 public/lanterns/lantern_*
+
+# local backups (not for the repo)
+*.bak
+public.bak/
+public/*.bak
 
 # incoming template working folder
 templates-incoming/*

@@ -7,12 +7,26 @@
 const os = require('os');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const Database = require('better-sqlite3');
 const qrcode = require('qrcode');
 const { PNG } = require('pngjs');
+
+// ── Google sign-in ─────────────────────────────────────────────────
+// Employees scan the QR, sign in with Google, and their Google account id
+// (`sub`) becomes their identity everywhere: one account = one lantern, and
+// all votes/wallet/streak key off `sub` (not a spoofable localStorage id).
+// We verify the ID token via Google's tokeninfo endpoint (no extra dep) and
+// mint our own HMAC-signed session cookie.
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ||
+  '137103551769-kddq37o61e8tmeatqq75cobru22b2nvb.apps.googleusercontent.com';
+// secret for signing session cookies. Set SESSION_SECRET in prod; dev fallback
+// is a fixed string so restarts don't log everyone out during testing.
+const SESSION_SECRET = process.env.SESSION_SECRET || 'mid-autumn-dev-secret-change-me';
+const SESSION_DAYS = 7;   // covers the whole 5-day event with margin
 
 // ── Background removal ─────────────────────────────────────────────
 // gpt-image-2 paints a solid (usually near-white/grey) backdrop. We flood-fill
@@ -98,6 +112,129 @@ try { db.exec('ALTER TABLE lanterns ADD COLUMN name TEXT'); } catch (e) {}
 try { db.exec("ALTER TABLE lanterns ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'"); } catch (e) {}
 try { db.exec('ALTER TABLE lanterns ADD COLUMN ai_file TEXT'); } catch (e) {}
 try { db.exec('ALTER TABLE lanterns ADD COLUMN wish TEXT'); } catch (e) {}
+// one lantern per device: tag every row with the phone's localStorage id.
+try { db.exec('ALTER TABLE lanterns ADD COLUMN device_id TEXT'); } catch (e) {}
+// one lantern per Google account: the account's `sub`. Old rows stay NULL
+// (unmapped) — they keep showing on the screen/rank but belong to no account.
+try { db.exec('ALTER TABLE lanterns ADD COLUMN user_sub TEXT'); } catch (e) {}
+
+// Google accounts that have signed in.
+db.exec(`CREATE TABLE IF NOT EXISTS users (
+  sub      TEXT PRIMARY KEY,
+  email    TEXT NOT NULL,
+  name     TEXT,
+  picture  TEXT,
+  created  INTEGER NOT NULL
+)`);
+
+// "Đèn Sáng Nhất" ranking game — runs across the whole 5-day event.
+// Fire = the voting currency, earned by spinning the wheel once per day.
+// Fires and the leaderboard ACCUMULATE over the event (no midnight reset);
+// only the once-per-day spin and the once-per-lantern-per-day vote are scoped
+// to `day` (YYYY-MM-DD local), so every day gives a fresh reason to come back.
+//   fires : one row per (voter gives 1 fire to a lantern) on a given day.
+//           UNIQUE(lantern,voter,day) => at most 1 fire per lantern per person/day,
+//           but the same lantern can be fired again on later days (cumulative).
+//   spins : one row per wheel spin; the once-per-day rule lives in /api/spin.
+db.exec('DROP TABLE IF EXISTS fires');   // was schema-less test data this session
+db.exec(`CREATE TABLE IF NOT EXISTS fires (
+  lantern  INTEGER NOT NULL,
+  voter    TEXT NOT NULL,
+  day      TEXT NOT NULL,
+  created  INTEGER NOT NULL,
+  UNIQUE(lantern, voter, day)
+)`);
+// no UNIQUE(voter,day): the once-per-day rule lives in the /api/spin route so
+// SPIN_UNLIMITED=1 can lift it for testing without a schema change.
+db.exec(`CREATE TABLE IF NOT EXISTS spins (
+  voter    TEXT NOT NULL,
+  day      TEXT NOT NULL,
+  reward   INTEGER NOT NULL,
+  created  INTEGER NOT NULL
+)`);
+// slide-puzzle mini game: one rewarded WIN per person per day (like spins).
+// reward folds into the same cumulative wallet. Kept across restarts.
+db.exec(`CREATE TABLE IF NOT EXISTS puzzles (
+  voter    TEXT NOT NULL,
+  day      TEXT NOT NULL,
+  reward   INTEGER NOT NULL,
+  created  INTEGER NOT NULL,
+  UNIQUE(voter, day)
+)`);
+// generic once-per-day mini games (shake, quiz, ...). One rewarded play per
+// person per day PER game. `data` stores a small JSON blob (quiz result etc.).
+// Folds into the same cumulative wallet; kept across restarts.
+db.exec(`CREATE TABLE IF NOT EXISTS games (
+  voter    TEXT NOT NULL,
+  day      TEXT NOT NULL,
+  game     TEXT NOT NULL,
+  reward   INTEGER NOT NULL,
+  data     TEXT,
+  created  INTEGER NOT NULL,
+  UNIQUE(voter, day, game)
+)`);
+
+// testing switch: SPIN_UNLIMITED=1 lets everyone spin as many times as they want
+// (fires still accumulate in the wallet). Default off = one spin per person/day.
+const SPIN_UNLIMITED = process.env.SPIN_UNLIMITED === '1';
+
+// local calendar day, e.g. "2026-09-04" — the reset boundary for the whole game
+function today() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+// the wheel face: 6 segments worth 1–4 fires. Laid out so equal values sit
+// OPPOSITE each other (1↔1, 4↔4) for a balanced look; 2 and 3 fill the rest.
+// A spin lands on a random segment; reward = that segment's value.
+const WHEEL = [1, 4, 2, 1, 4, 3];
+
+// slide-puzzle: fires awarded for the first solve each day.
+// roll-the-mooncake maze (db key 'puzzle'): fires scale with score 0..100
+// (reached the goal + how fast / how many goals). Max reward when done well.
+const PUZZLE_MAX_REWARD = Number(process.env.PUZZLE_MAX_REWARD || 4);
+// shake game: fires scale with how hard you shake (client sends a score 0..100).
+const SHAKE_MAX_REWARD = Number(process.env.SHAKE_MAX_REWARD || 4);
+// quiz: flat reward for finishing the "which mooncake are you" quiz once/day.
+const QUIZ_REWARD = Number(process.env.QUIZ_REWARD || 2);
+// bake-the-mooncake game (db key 'fortune'): fires scale with how well you kept
+// the oven in the target heat zone (client sends a score 0..100).
+const BAKE_MAX_REWARD = Number(process.env.BAKE_MAX_REWARD || 4);
+// catch-the-rabbit: fires scale with score (client sends catches 0..100).
+const CATCH_MAX_REWARD = Number(process.env.CATCH_MAX_REWARD || 4);
+
+// daily check-in streak bonus: extra fires the first time a voter reaches N
+// distinct spin-days over the event. Keeps people coming back all 5 days.
+//   day 3  -> +3 fires,  day 5 -> +5 fires (+ a badge on the client).
+const STREAK_BONUS = { 3: 3, 5: 5 };
+
+// how many distinct days this voter has spun the wheel (their check-in streak)
+function spinDays(voter) {
+  return db.prepare('SELECT COUNT(DISTINCT day) AS n FROM spins WHERE voter=?').get(voter).n;
+}
+
+// wallet is CUMULATIVE across the whole event (no per-day reset):
+//   earned = every fire ever won from spins (base rewards + streak bonuses)
+//   spent  = every fire ever given to a lantern
+// Only canSpin / firedToday are scoped to `day` (the once-per-day gates).
+function wallet(voter, day) {
+  const spinEarned   = db.prepare('SELECT COALESCE(SUM(reward),0) AS n FROM spins WHERE voter=?').get(voter).n;
+  const puzzleEarned = db.prepare('SELECT COALESCE(SUM(reward),0) AS n FROM puzzles WHERE voter=?').get(voter).n;
+  const gameEarned   = db.prepare('SELECT COALESCE(SUM(reward),0) AS n FROM games WHERE voter=?').get(voter).n;
+  const earned = spinEarned + puzzleEarned + gameEarned;
+  const spent  = db.prepare('SELECT COUNT(*) AS n FROM fires WHERE voter=?').get(voter).n;
+  const spun   = !!db.prepare('SELECT 1 FROM spins WHERE voter=? AND day=?').get(voter, day);
+  const puzzled= !!db.prepare('SELECT 1 FROM puzzles WHERE voter=? AND day=?').get(voter, day);
+  const playedRows = db.prepare('SELECT game FROM games WHERE voter=? AND day=?').all(voter, day);
+  const played = {}; playedRows.forEach(r => played[r.game] = true);
+  const fired  = db.prepare('SELECT lantern FROM fires WHERE voter=? AND day=?').all(voter, day).map(r => r.lantern);
+  const earnedToday = db.prepare('SELECT COALESCE(SUM(reward),0) AS n FROM spins WHERE voter=? AND day=?').get(voter, day).n;
+  return { balance: earned - spent, earned, spent, earnedToday,
+           canSpin: SPIN_UNLIMITED || !spun, canPuzzle: !puzzled,
+           canShake: !played.shake, canQuiz: !played.quiz,
+           canFortune: !played.fortune, canCatch: !played.catch,
+           firedToday: fired, days: spinDays(voter) };
+}
 
 // set to false to skip moderation (auto-approve everything, like before)
 const MODERATION = true;
@@ -142,10 +279,83 @@ console.log(AI.enabled
 
 const app = express();
 app.use(express.json({ limit: '8mb' }));       // base64 PNG from the phone
+
+// ── session cookie (HMAC-signed, httpOnly) ─────────────────────────
+// payload = base64url(JSON).signature ; signature = HMAC-SHA256(payload, secret)
+function signSession(obj) {
+  const body = Buffer.from(JSON.stringify(obj)).toString('base64url');
+  const sig = crypto.createHmac('sha256', SESSION_SECRET).update(body).digest('base64url');
+  return body + '.' + sig;
+}
+function verifySession(token) {
+  if (!token || token.indexOf('.') < 0) return null;
+  const [body, sig] = token.split('.');
+  const expect = crypto.createHmac('sha256', SESSION_SECRET).update(body).digest('base64url');
+  // constant-time compare
+  if (sig.length !== expect.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expect))) return null;
+  try {
+    const obj = JSON.parse(Buffer.from(body, 'base64url').toString());
+    if (!obj.sub || !obj.exp || Date.now() > obj.exp) return null;
+    return obj;
+  } catch (e) { return null; }
+}
+// parse our cookie and attach req.user = { sub, email, name, picture } | null
+app.use((req, res, next) => {
+  const raw = req.headers.cookie || '';
+  const m = raw.match(/(?:^|;\s*)ml_session=([^;]+)/);
+  req.user = m ? verifySession(decodeURIComponent(m[1])) : null;
+  next();
+});
+// gate for routes that require a signed-in employee
+function requireAuth(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: 'auth_required' });
+  next();
+}
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // simple health check (handy for testing connectivity from a phone)
 app.get('/health', (req, res) => res.json({ status: 'ok', ip: lanIP(), time: Date.now() }));
+
+// ── auth endpoints ─────────────────────────────────────────────────
+// client sends the Google ID token (credential) from Google Identity Services.
+// We verify it against Google's tokeninfo endpoint, check it was issued for our
+// client id, then upsert the user and set a signed session cookie.
+app.post('/api/auth/google', async (req, res) => {
+  const credential = (req.body?.credential || '').toString();
+  if (!credential) return res.status(400).json({ error: 'need credential' });
+  try {
+    const r = await fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(credential));
+    if (!r.ok) { console.error('auth invalid_token: tokeninfo status', r.status, (await r.text()).slice(0,200)); return res.status(401).json({ error: 'invalid_token' }); }
+    const p = await r.json();
+    // token must be minted for THIS app and by Google
+    if (p.aud !== GOOGLE_CLIENT_ID) { console.error('auth wrong_audience:', p.aud); return res.status(401).json({ error: 'wrong_audience' }); }
+    if (p.iss !== 'accounts.google.com' && p.iss !== 'https://accounts.google.com') {
+      console.error('auth bad_issuer:', p.iss); return res.status(401).json({ error: 'bad_issuer' });
+    }
+    if (!p.sub) return res.status(401).json({ error: 'no_sub' });
+    db.prepare(`INSERT INTO users (sub,email,name,picture,created) VALUES (?,?,?,?,?)
+      ON CONFLICT(sub) DO UPDATE SET email=excluded.email, name=excluded.name, picture=excluded.picture`)
+      .run(p.sub, p.email || '', p.name || null, p.picture || null, Date.now());
+    const exp = Date.now() + SESSION_DAYS*24*3600*1000;
+    const token = signSession({ sub: p.sub, email: p.email, name: p.name, picture: p.picture, exp });
+    res.setHeader('Set-Cookie',
+      `ml_session=${encodeURIComponent(token)}; Path=/; Max-Age=${SESSION_DAYS*24*3600}; HttpOnly; SameSite=Lax`);
+    res.json({ ok: true, user: { sub: p.sub, email: p.email, name: p.name, picture: p.picture } });
+  } catch (e) {
+    console.error('google auth error:', e.message);
+    res.status(500).json({ error: 'auth_failed' });
+  }
+});
+// who am I (client calls on load to decide login vs draw)
+app.get('/api/me', (req, res) => {
+  res.json({ user: req.user ? { sub: req.user.sub, email: req.user.email, name: req.user.name, picture: req.user.picture } : null,
+             clientId: GOOGLE_CLIENT_ID });
+});
+app.post('/api/auth/logout', (req, res) => {
+  res.setHeader('Set-Cookie', 'ml_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
+  res.json({ ok: true });
+});
 
 // friendly URL for the big screen (so /screen works, not just /screen.html)
 app.get('/screen', (req, res) => {
@@ -157,6 +367,160 @@ app.get('/qr', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'qr.html'));
 });
 
+// "Đèn Sáng Nhất" leaderboard page + spin-the-wheel page
+app.get('/rank', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'rank.html'));
+});
+app.get('/spin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'spin.html'));
+});
+app.get('/puzzle', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'puzzle.html'));
+});
+app.get('/shake', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'shake.html'));
+});
+app.get('/quiz', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'quiz.html'));
+});
+app.get('/fortune', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'fortune.html'));
+});
+app.get('/catch', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'catch.html'));
+});
+app.get('/hub', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'hub.html'));
+});
+
+// leaderboard: approved lanterns ranked by TOTAL fires over the whole event
+// (newest wins ties). ?voter=... also returns that person's wallet so the page
+// can gate the fire buttons.
+app.get('/api/leaderboard', (req, res) => {
+  const day = today();
+  const rows = db.prepare(
+    "SELECT l.id, COALESCE(l.ai_file, l.file) AS file, l.name, l.wish, " +
+    "       (SELECT COUNT(*) FROM fires f WHERE f.lantern = l.id) AS fires " +
+    "FROM lanterns l WHERE l.status='approved' " +
+    "ORDER BY fires DESC, l.id DESC LIMIT 50"
+  ).all();
+  // identity comes from the signed session cookie, not a client-supplied param
+  const voter = req.user ? req.user.sub : null;
+  res.json({ day, board: rows, wallet: voter ? wallet(voter, day) : null });
+});
+
+// spin the wheel once per day -> earn 1–4 fires. Returns the landed segment
+// index (so the UI can animate to it) and the reward.
+app.post('/api/spin', requireAuth, (req, res) => {
+  const day = today();
+  const v = req.user.sub;
+  if (!SPIN_UNLIMITED && db.prepare('SELECT 1 FROM spins WHERE voter=? AND day=?').get(v, day)) {
+    return res.status(409).json({ error: 'already_spun', wallet: wallet(v, day) });
+  }
+  const segment = Math.floor(Math.random() * WHEEL.length);
+  const reward = WHEEL[segment];
+  db.prepare('INSERT INTO spins (voter, day, reward, created) VALUES (?, ?, ?, ?)')
+    .run(v, day, reward, Date.now());
+  // check-in streak: this spin may have just reached a new distinct-day milestone.
+  // Award the bonus once, as an extra spins row (so it folds into earned/balance).
+  const days = spinDays(v);
+  const bonus = STREAK_BONUS[days] || 0;
+  if (bonus) {
+    db.prepare('INSERT INTO spins (voter, day, reward, created) VALUES (?, ?, ?, ?)')
+      .run(v, day, bonus, Date.now());
+  }
+  res.json({ ok: true, segment, reward, bonus, days, wheel: WHEEL, wallet: wallet(v, day) });
+});
+
+// roll-the-mooncake maze: client sends score 0..100 (goals reached / speed).
+// Reward scales 1..PUZZLE_MAX_REWARD. First play per day only.
+app.post('/api/puzzle/win', requireAuth, (req, res) => {
+  const day = today();
+  const v = req.user.sub;
+  const score = Math.max(0, Math.min(100, Number(req.body?.score) || 0));
+  const reward = Math.max(1, Math.round(score / 100 * PUZZLE_MAX_REWARD));
+  const r = db.prepare('INSERT OR IGNORE INTO puzzles (voter, day, reward, created) VALUES (?, ?, ?, ?)')
+    .run(v, day, reward, Date.now());
+  if (r.changes === 0) return res.status(409).json({ error: 'already_won', wallet: wallet(v, day) });
+  res.json({ ok: true, reward, score, wallet: wallet(v, day) });
+});
+
+// shake game: client sends score 0..100 (how hard they shook). Reward scales
+// 1..SHAKE_MAX_REWARD. First play per day only (UNIQUE(voter,day,game)).
+app.post('/api/shake/win', requireAuth, (req, res) => {
+  const day = today();
+  const v = req.user.sub;
+  const score = Math.max(0, Math.min(100, Number(req.body?.score) || 0));
+  const reward = Math.max(1, Math.round(score / 100 * SHAKE_MAX_REWARD));
+  const r = db.prepare("INSERT OR IGNORE INTO games (voter, day, game, reward, data, created) VALUES (?, ?, 'shake', ?, ?, ?)")
+    .run(v, day, reward, JSON.stringify({ score }), Date.now());
+  if (r.changes === 0) return res.status(409).json({ error: 'already_played', wallet: wallet(v, day) });
+  res.json({ ok: true, reward, score, wallet: wallet(v, day) });
+});
+
+// quiz: flat reward the first time per day. `result` is the mooncake key the
+// client computed, stored just for fun/analytics.
+app.post('/api/quiz/win', requireAuth, (req, res) => {
+  const day = today();
+  const v = req.user.sub;
+  const result = (req.body?.result || '').toString().slice(0, 40);
+  const r = db.prepare("INSERT OR IGNORE INTO games (voter, day, game, reward, data, created) VALUES (?, ?, 'quiz', ?, ?, ?)")
+    .run(v, day, QUIZ_REWARD, JSON.stringify({ result }), Date.now());
+  if (r.changes === 0) return res.status(409).json({ error: 'already_played', wallet: wallet(v, day) });
+  res.json({ ok: true, reward: QUIZ_REWARD, wallet: wallet(v, day) });
+});
+
+// bake-the-mooncake: client sends score 0..100 (how long the oven stayed in the
+// target heat zone). Reward scales 1..BAKE_MAX_REWARD. First play per day only.
+app.post('/api/fortune/win', requireAuth, (req, res) => {
+  const day = today();
+  const v = req.user.sub;
+  const score = Math.max(0, Math.min(100, Number(req.body?.score) || 0));
+  const reward = Math.max(1, Math.round(score / 100 * BAKE_MAX_REWARD));
+  const r = db.prepare("INSERT OR IGNORE INTO games (voter, day, game, reward, data, created) VALUES (?, ?, 'fortune', ?, ?, ?)")
+    .run(v, day, reward, JSON.stringify({ score }), Date.now());
+  if (r.changes === 0) return res.status(409).json({ error: 'already_played', wallet: wallet(v, day) });
+  res.json({ ok: true, reward, score, wallet: wallet(v, day) });
+});
+
+// catch-the-rabbit: client sends score 0..100 (how many caught). Reward scales
+// 1..CATCH_MAX_REWARD. First play per day only.
+app.post('/api/catch/win', requireAuth, (req, res) => {
+  const day = today();
+  const v = req.user.sub;
+  const score = Math.max(0, Math.min(100, Number(req.body?.score) || 0));
+  const reward = Math.max(1, Math.round(score / 100 * CATCH_MAX_REWARD));
+  const r = db.prepare("INSERT OR IGNORE INTO games (voter, day, game, reward, data, created) VALUES (?, ?, 'catch', ?, ?, ?)")
+    .run(v, day, reward, JSON.stringify({ score }), Date.now());
+  if (r.changes === 0) return res.status(409).json({ error: 'already_played', wallet: wallet(v, day) });
+  res.json({ ok: true, reward, score, wallet: wallet(v, day) });
+});
+
+// how many fires this voter still has to spend today (and whether they've spun)
+app.get('/api/wallet', (req, res) => {
+  if (!req.user) return res.json({ day: today(), wheel: WHEEL, wallet: null });
+  res.json({ day: today(), wheel: WHEEL, wallet: wallet(req.user.sub, today()) });
+});
+
+// spend one fire on a lantern. Requires balance > 0 and not already fired today.
+app.post('/api/fire', requireAuth, (req, res) => {
+  const day = today();
+  const lanternId = Number(req.body?.id);
+  const v = req.user.sub;
+  if (!lanternId) return res.status(400).json({ error: 'need id' });
+  const row = db.prepare("SELECT id FROM lanterns WHERE id=? AND status='approved'").get(lanternId);
+  if (!row) return res.status(404).json({ error: 'not found' });
+  const w = wallet(v, day);
+  if (w.balance <= 0) return res.status(403).json({ error: 'no_fires', wallet: w });
+  // INSERT OR IGNORE: already fired this lantern today => no-op, refund nothing spent
+  const r = db.prepare('INSERT OR IGNORE INTO fires (lantern, voter, day, created) VALUES (?, ?, ?, ?)')
+    .run(lanternId, v, day, Date.now());
+  if (r.changes === 0) return res.status(409).json({ error: 'already_fired', wallet: w });
+  const fires = db.prepare('SELECT COUNT(*) AS n FROM fires WHERE lantern=? AND day=?').get(lanternId, day).n;
+  io.emit('fire-changed', { id: lanternId, fires });
+  res.json({ ok: true, fires, wallet: wallet(v, day) });
+});
+
 // list available lantern templates (any *_lines.png in public/templates)
 app.get('/api/templates', (req, res) => {
   const dir = path.join(__dirname, 'public', 'templates');
@@ -165,6 +529,24 @@ app.get('/api/templates', (req, res) => {
     .map(f => f.replace(/_lines\.png$/, ''))
     .filter(n => n !== 'star');            // hide the built-in placeholder
   res.json(names);
+});
+
+// the lantern this device already released (if any) — the phone calls this on
+// load to decide: show "your lantern" instead of the draw flow. Includes its
+// current total fires + rank so the child sees how their lantern is doing.
+app.get('/api/my-lantern', (req, res) => {
+  if (!req.user) return res.json({ lantern: null });
+  const row = db.prepare(
+    "SELECT id, COALESCE(ai_file, file) AS file, name, wish, status FROM lanterns " +
+    "WHERE user_sub=? AND status='approved' ORDER BY id DESC LIMIT 1"
+  ).get(req.user.sub);
+  if (!row) return res.json({ lantern: null });
+  const fires = db.prepare('SELECT COUNT(*) AS n FROM fires WHERE lantern=?').get(row.id).n;
+  const rank = db.prepare(
+    "SELECT COUNT(*)+1 AS r FROM lanterns l WHERE l.status='approved' AND " +
+    "(SELECT COUNT(*) FROM fires f WHERE f.lantern=l.id) > ?"
+  ).get(fires).r;
+  res.json({ lantern: { ...row, fires, rank } });
 });
 
 // most recent APPROVED lanterns, newest last — the screen asks for these on load
@@ -203,19 +585,23 @@ app.get('/api/qr', async (req, res) => {
 //   POST /preview  -> run AI now, return {id, ai} (base64) so the child sees it
 //   POST /confirm  -> child likes it: fly it straight to the screen (no moderation)
 //   (no confirm / redraw = the 'preview' row is just left; /preview overwrites on retry)
-app.post('/preview', async (req, res) => {
+app.post('/preview', requireAuth, async (req, res) => {
   const { image, template, name } = req.body || {};
   if (!image || !image.startsWith('data:image/png;base64,')) {
     return res.status(400).json({ error: 'need a PNG data URL' });
   }
+  const sub = req.user.sub;
+  // one lantern per Google account: if already released one, don't allow another.
+  const existing = db.prepare("SELECT id FROM lanterns WHERE user_sub=? AND status='approved'").get(sub);
+  if (existing) return res.status(409).json({ error: 'already_have', id: existing.id });
   const buf = Buffer.from(image.replace(/^data:image\/png;base64,/, ''), 'base64');
   const file = `lantern_${Date.now()}_${Math.floor(performance.now() * 1000) % 100000}.png`;
   fs.writeFileSync(path.join(LANTERN_DIR, file), buf);
   const child = (name || '').toString().trim().slice(0, 16) || null;
   const created = Date.now();
   const info = db.prepare(
-    "INSERT INTO lanterns (file, template, name, status, created) VALUES (?, ?, ?, 'preview', ?)"
-  ).run(file, template || null, child, created);
+    "INSERT INTO lanterns (file, template, name, status, user_sub, created) VALUES (?, ?, ?, 'preview', ?, ?)"
+  ).run(file, template || null, child, sub, created);
   const id = info.lastInsertRowid;
 
   if (!AI.enabled) {
@@ -247,10 +633,15 @@ app.post('/confirm', (req, res) => {
 });
 
 // bé bấm "Thả lên Bầu trời" -> giờ mới bay lên /screen
-app.post('/release', (req, res) => {
+app.post('/release', requireAuth, (req, res) => {
   const { id } = req.body || {};
   const row = db.prepare('SELECT * FROM lanterns WHERE id=?').get(id);
   if (!row) return res.status(404).json({ error: 'not found' });
+  // the lantern must belong to the signed-in account
+  if (row.user_sub && row.user_sub !== req.user.sub) return res.status(403).json({ error: 'not_yours' });
+  // one lantern per account: block if this account already released a different one.
+  const existing = db.prepare("SELECT id FROM lanterns WHERE user_sub=? AND status='approved' AND id<>?").get(req.user.sub, id);
+  if (existing) return res.status(409).json({ error: 'already_have', id: existing.id });
   db.prepare("UPDATE lanterns SET status='approved' WHERE id=?").run(id);
   io.emit('new-lantern', { id: row.id, file: row.ai_file || row.file,   // ưu tiên ảnh AI
     template: row.template, name: row.name, wish: row.wish, created: row.created });

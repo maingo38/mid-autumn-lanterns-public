@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Nhan Banh Nhan Vien</title>
+<style>
+  :root{ --gold:#ffd77a; --gold2:#ffe9b0; --deep:#0a0620; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    color:#fff; background:radial-gradient(130% 100% at 50% -10%, #2a1a5e 0%, var(--deep) 58%, #05030f 100%);
+    min-height:100vh; overflow-x:hidden; text-align:center; display:flex; flex-direction:column; align-items:center; }
+  body::after{ content:''; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.5;
+    background-image:radial-gradient(1.5px 1.5px at 20% 30%, #fff, transparent), radial-gradient(1.5px 1.5px at 70% 20%, #fff, transparent), radial-gradient(1px 1px at 40% 60%, #fff, transparent), radial-gradient(1.5px 1.5px at 85% 55%, #fff, transparent);
+    background-repeat:no-repeat; }
+  h1{ margin:22px 16px 6px; font-size:clamp(22px,5.4vw,34px); font-weight:800; position:relative; z-index:2;
+    background:linear-gradient(180deg,#fff6e2,var(--gold) 55%,#ff8c1a);
+    -webkit-background-clip:text; background-clip:text; color:transparent; text-shadow:0 0 34px rgba(255,180,80,.3); }
+  .bal{ margin-top:6px; font-weight:800; color:var(--gold2); font-size:16px; position:relative; z-index:2; }
+
+  .card{ position:relative; z-index:2; width:min(90vw,420px); margin:18px auto; padding:22px 20px;
+    background:linear-gradient(180deg, rgba(60,40,120,.5), rgba(30,20,70,.5)); border:1px solid rgba(255,215,120,.25);
+    border-radius:20px; box-shadow:0 14px 40px rgba(0,0,0,.5); }
+  .prog{ color:#cbb8ff; font-size:13px; margin-bottom:10px; }
+  .bar{ height:6px; border-radius:999px; background:#ffffff1a; overflow:hidden; margin-bottom:16px; }
+  .bar i{ display:block; height:100%; background:linear-gradient(90deg,#ffd166,#ff8c1a); transition:width .3s; }
+  .q{ font-size:19px; font-weight:800; margin:0 0 18px; line-height:1.4; }
+  .opt{ display:block; width:100%; text-align:left; margin:9px 0; padding:14px 16px; font-size:15.5px; font-weight:700;
+    color:#fff; border:1.5px solid rgba(255,215,120,.3); border-radius:14px; cursor:pointer;
+    background:rgba(255,255,255,.06); transition:transform .1s, background .15s, border-color .15s; }
+  .opt:hover{ border-color:#ffd166; background:rgba(255,209,102,.14); }
+  .opt:active{ transform:scale(.97); }
+  .opt.pick{ border-color:#ffd166; background:rgba(255,209,102,.28); }
+
+  .rEmoji{ font-size:96px; filter:drop-shadow(0 0 30px #ffd77a); animation:bob 3s ease-in-out infinite; }
+  @keyframes bob{ 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+  .rName{ font-size:26px; font-weight:900; margin:8px 0 4px;
+    background:linear-gradient(90deg,#ffe9b0,#ffd166,#ff8c1a); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+  .rDesc{ color:#e7ddff; font-size:16px; line-height:1.5; margin:6px 4px 18px; }
+  .reward{ color:var(--gold); font-weight:800; font-size:18px; margin:6px 0 4px; }
+  .b{ border:none; cursor:pointer; font-size:16px; font-weight:800; color:#fff; padding:13px 22px; border-radius:999px; margin:6px;
+    background:radial-gradient(circle at 50% 26%, #ffa63d, #ff8c1a 40%, #b5340c); box-shadow:0 6px 18px rgba(255,120,20,.5); transition:transform .12s; }
+  .b.ghost{ background:#3a2168; box-shadow:0 4px 12px #0005; }
+  .b:active{ transform:scale(.95); }
+  .backlink{ display:inline-block; margin:6px 6px 40px; color:#cbb8ff; text-decoration:none; font-weight:700; position:relative; z-index:2;
+    border:1px solid rgba(255,215,120,.3); border-radius:999px; padding:10px 22px; }
+  .confetti{ position:fixed; top:-10px; font-size:22px; z-index:60; pointer-events:none; animation:fall linear forwards; }
+  @keyframes fall{ to{ transform:translateY(110vh) rotate(360deg); opacity:0; } }
+</style>
+</head>
+<body>
+  <h1>🥮 Nhân Bánh Là Nhân Viên Nào?</h1>
+  <div class="bal" id="bal">🔥 …</div>
+  <div class="card" id="card"></div>
+  <a class="backlink" href="/hub">← Về trang chính</a>
+
+  <script>
+    // pool of questions; each play picks QUIZ_LEN at random, options shuffled.
+    const POOL = [
+      { q:'Sáng thứ Hai ở văn phòng, bạn là?', opts:[
+        {t:'Cà phê chưa uống thì đừng hỏi gì 🥱', k:'thapcam'},
+        {t:'Đã dọn sạch 20 email từ 8h sáng', k:'sen'},
+        {t:'Đi một vòng chào & hóng chuyện đã', k:'deo'},
+        {t:'Lặng lẽ cày, không ai hay biết', k:'trungmuoi'} ]},
+      { q:'Deadline dí sát nút, phản ứng của bạn?', opts:[
+        {t:'Bình tĩnh, mọi thứ trong tầm tay', k:'sen'},
+        {t:'Làm luôn một thể thêm 5 việc khác', k:'thapcam'},
+        {t:'Rủ cả team ở lại chiến cho vui', k:'deo'},
+        {t:'Cháy âm ỉ bên trong nhưng vẫn xong', k:'trungmuoi'} ]},
+      { q:'Trong nhóm chat công ty, bạn hay?', opts:[
+        {t:'Thả 100 icon mỗi tin nhắn 🎉', k:'deo'},
+        {t:'Chốt việc gọn gàng, rõ deadline', k:'sen'},
+        {t:'Cái gì cũng biết một chút để góp vui', k:'thapcam'},
+        {t:'Đọc hết nhưng hiếm khi rep 👀', k:'trungmuoi'} ]},
+      { q:'Tiệc công ty, bạn sẽ?', opts:[
+        {t:'Cầm mic đầu tiên, quẩy hết mình 🎤', k:'deo'},
+        {t:'Lo hậu cần cho mọi người', k:'sen'},
+        {t:'Đi một vòng nếm thử hết các món', k:'thapcam'},
+        {t:'Ngồi góc quan sát, cười duyên', k:'trungmuoi'} ]},
+      { q:'Sếp giao việc mới toanh chưa ai làm, bạn?', opts:[
+        {t:'Thử luôn, sợ gì mà không thử!', k:'thapcam'},
+        {t:'Lên kế hoạch từng bước trước đã', k:'sen'},
+        {t:'Rủ đồng đội cùng brainstorm', k:'deo'},
+        {t:'Gật đầu rồi âm thầm tự mày mò', k:'trungmuoi'} ]},
+      { q:'Giờ nghỉ trưa lý tưởng của bạn?', opts:[
+        {t:'Ngủ 20 phút cho lại sức 😴', k:'sen'},
+        {t:'Buôn dưa lê cùng đồng nghiệp', k:'deo'},
+        {t:'Tranh thủ làm nốt cho hết việc', k:'trungmuoi'},
+        {t:'Ăn 3 món + trà sữa, sống là phải chill', k:'thapcam'} ]},
+      { q:'Máy in kẹt giấy ngay lúc gấp, bạn?', opts:[
+        {t:'Bình tĩnh sửa, chuyện nhỏ', k:'sen'},
+        {t:'Hô to cả phòng "ai biết sửa hông?"', k:'deo'},
+        {t:'Thử mọi nút, kiểu gì cũng ra', k:'thapcam'},
+        {t:'Lặng lẽ qua máy khác in, không nói gì', k:'trungmuoi'} ]},
+      { q:'Được khen trước cả công ty, bạn?', opts:[
+        {t:'Cảm ơn ngắn gọn rồi về chỗ', k:'trungmuoi'},
+        {t:'Cười tươi, cảm ơn cả team', k:'sen'},
+        {t:'Nhân dịp này rủ mọi người đi ăn 🎉', k:'deo'},
+        {t:'"Chuyện nhỏ" nhưng vui cả tuần', k:'thapcam'} ]},
+      { q:'Kiểu tin nhắn bạn hay gửi sếp nhất?', opts:[
+        {t:'"Em đã xong, sếp check giúp ạ" ✅', k:'sen'},
+        {t:'"Dạ để em lo hết!"', k:'thapcam'},
+        {t:'"Team mình ăn mừng nhé sếp 🥳"', k:'deo'},
+        {t:'...(thấy rồi mà chưa rep)', k:'trungmuoi'} ]},
+      { q:'Cuối tuần của bạn trông như?', opts:[
+        {t:'Lên lịch rõ ràng từng khung giờ', k:'sen'},
+        {t:'Hẹn hò bạn bè kín lịch', k:'deo'},
+        {t:'Làm đủ thứ: dọn nhà, học, chơi', k:'thapcam'},
+        {t:'Ở nhà một mình, sạc lại năng lượng', k:'trungmuoi'} ]},
+      { q:'Chọn 1 siêu năng lực cho công sở:', opts:[
+        {t:'Không bao giờ trễ deadline', k:'sen'},
+        {t:'Làm 10 việc cùng lúc', k:'thapcam'},
+        {t:'Ai gặp cũng quý mình', k:'deo'},
+        {t:'Tàng hình lúc sếp tìm người', k:'trungmuoi'} ]},
+      { q:'Đồng nghiệp mô tả bạn bằng 1 từ:', opts:[
+        {t:'Đáng tin', k:'sen'},
+        {t:'Vui tính', k:'deo'},
+        {t:'Đa-zi-năng', k:'thapcam'},
+        {t:'Bí ẩn', k:'trungmuoi'} ]},
+    ];
+    const QUIZ_LEN = 5;
+
+    const RESULTS = {
+      sen:       { emoji:'🌕', name:'Bánh nướng nhân sen',  desc:'Điềm tĩnh, đáng tin, deadline nào cũng lo xong. Cả team dựa vào bạn — nhớ nghỉ ngơi nữa nhé!' },
+      deo:       { emoji:'🎐', name:'Bánh dẻo tuyết',       desc:'Ngọt ngào, vui vẻ, là linh hồn của mọi buổi tiệc. Vắng bạn văn phòng buồn hẳn!' },
+      thapcam:   { emoji:'🥮', name:'Bánh thập cẩm',        desc:'Đa năng, việc gì cũng cân, mười việc một lúc vẫn ngon lành. Một người bằng cả team.' },
+      trungmuoi: { emoji:'🥚', name:'Bánh nhân trứng muối', desc:'Trầm lặng mà chất lượng, càng làm cùng càng thấy đậm đà. Ninja công sở đích thực.' },
+    };
+
+    const balEl = document.getElementById('bal');
+    const card = document.getElementById('card');
+    let quiz = [], idx = 0, scores = {}, playedToday = false, locked = false;
+
+    function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+    async function loadWallet(){
+      const r = await (await fetch('/api/wallet')).json();
+      if (!r.wallet){ location.href = '/'; return; }
+      playedToday = !r.wallet.canQuiz;
+      balEl.textContent = '🔥 ' + r.wallet.balance + ' lửa';
+    }
+
+    function newGame(){
+      quiz = shuffle(POOL.slice()).slice(0, QUIZ_LEN).map(q=>({ q:q.q, opts:shuffle(q.opts.slice()) }));
+      idx = 0; scores = {}; locked = false;
+      renderQ();
+    }
+
+    function renderQ(){
+      const Q = quiz[idx];
+      card.innerHTML = '';
+      const prog = document.createElement('div'); prog.className='prog';
+      prog.textContent = 'Câu ' + (idx+1) + '/' + quiz.length;
+      const bar = document.createElement('div'); bar.className='bar';
+      const fill = document.createElement('i'); fill.style.width = (idx/quiz.length*100)+'%'; bar.appendChild(fill);
+      const qp = document.createElement('p'); qp.className='q'; qp.textContent = Q.q;
+      card.appendChild(prog); card.appendChild(bar); card.appendChild(qp);
+      Q.opts.forEach(o=>{
+        const btn = document.createElement('button');
+        btn.className = 'opt'; btn.textContent = o.t;
+        btn.addEventListener('click', ()=>choose(o, btn));
+        card.appendChild(btn);
+      });
+      locked = false;
+    }
+
+    function choose(o, btn){
+      if (locked) return;          // guard against double-tap / fast taps
+      locked = true;
+      btn.classList.add('pick');
+      scores[o.k] = (scores[o.k]||0) + 1;
+      setTimeout(()=>{
+        idx++;
+        if (idx < quiz.length) renderQ(); else finish();
+      }, 180);
+    }
+
+    async function finish(){
+      let best = 'sen', bestN = -1;
+      for (const k in RESULTS){ if ((scores[k]||0) > bestN){ bestN = scores[k]||0; best = k; } }
+      const R = RESULTS[best];
+      let rewardLine = '';
+      if (!playedToday){
+        try {
+          const resp = await fetch('/api/quiz/win', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ result: best }) });
+          if (resp.status === 401){ location.href = '/'; return; }
+          const r = await resp.json();
+          if (resp.ok){ rewardLine = '<div class="reward">+' + r.reward + ' lửa 🔥</div>'; balEl.textContent = '🔥 ' + r.wallet.balance + ' lửa'; playedToday = true; confetti(); showCheer({delay:1200}); }
+          else if (r.wallet){ balEl.textContent = '🔥 ' + r.wallet.balance + ' lửa'; playedToday = true; }
+        } catch(e){}
+      } else {
+        rewardLine = '<div class="reward" style="color:#cbb8ff">Hôm nay đã nhận lửa rồi 🌙 (chơi lại cho vui thôi nhé)</div>';
+      }
+      card.innerHTML =
+        '<div class="rEmoji">' + R.emoji + '</div>' +
+        '<div class="rName">' + R.name + '</div>' +
+        '<div class="rDesc">' + R.desc + '</div>' +
+        rewardLine +
+        '<button class="b ghost" id="again">Làm lại 🔁</button>' +
+        '<button class="b" onclick="location.href=\'/rank\'">Đi cổ vũ 🔥</button>';
+      document.getElementById('again').addEventListener('click', newGame);
+    }
+
+    function confetti(){
+      const icons = ['🥮','🌕','✨','🎐','🌟'];
+      for (let i=0;i<20;i++){
+        const c = document.createElement('div');
+        c.className='confetti'; c.textContent = icons[i%icons.length];
+        c.style.left = Math.random()*100+'vw';
+        c.style.animationDuration = (1.4+Math.random()*1.4)+'s';
+        c.style.animationDelay = (Math.random()*0.4)+'s';
+        document.body.appendChild(c); setTimeout(()=>c.remove(), 3200);
+      }
+    }
+
+    (async ()=>{ await loadWallet(); newGame(); })();
+  </script>
+<script src="/cheer.js"></script>
+</body>
+</html>

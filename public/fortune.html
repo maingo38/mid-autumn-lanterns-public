@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Nuong Banh Trung Thu</title>
+<style>
+  :root{ --gold:#ffd77a; --gold2:#ffe9b0; --deep:#0a0620; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-user-select:none; user-select:none; }
+  body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    color:#fff; background:radial-gradient(130% 100% at 50% -10%, #2a1a5e 0%, var(--deep) 58%, #05030f 100%);
+    min-height:100vh; overflow:hidden; text-align:center; display:flex; flex-direction:column; align-items:center; }
+  h1{ margin:18px 16px 2px; font-size:clamp(22px,5.4vw,32px); font-weight:800; position:relative; z-index:3;
+    background:linear-gradient(180deg,#fff6e2,var(--gold) 55%,#ff8c1a);
+    -webkit-background-clip:text; background-clip:text; color:transparent; text-shadow:0 0 30px rgba(255,180,80,.3); }
+  .sub{ color:#cbb8ff; font-size:13.5px; margin:0 20px; position:relative; z-index:3; max-width:350px; line-height:1.45; }
+  .hud{ position:relative; z-index:3; display:flex; gap:16px; margin-top:10px; font-weight:800; }
+  .hud .box{ background:#241542; border:1.5px solid rgba(255,215,120,.3); border-radius:12px; padding:8px 16px; }
+  .hud .box span{ color:var(--gold2); }
+
+  /* the oven: a vertical heat gauge with a moving target band */
+  .stage{ position:relative; z-index:2; display:flex; align-items:flex-end; gap:22px; margin:16px 0 8px; }
+  .gauge{ position:relative; width:70px; height:300px; border-radius:16px; overflow:hidden;
+    background:linear-gradient(180deg,#ef5350 0%,#ffb84d 45%,#66bb6a 55%,#ffb84d 65%,#ef5350 100%);
+    border:3px solid #ffcf6a; box-shadow:0 0 0 4px #b5340c, 0 14px 34px rgba(0,0,0,.5); opacity:.5; }
+  /* target band — keep the needle inside it */
+  .target{ position:absolute; left:0; right:0; background:rgba(255,255,255,.28);
+    border-top:3px dashed #fff; border-bottom:3px dashed #fff; }
+  /* the needle = current heat */
+  .needle{ position:absolute; left:-8px; right:-8px; height:6px; background:#fff;
+    box-shadow:0 0 12px #fff, 0 0 4px #000; border-radius:3px; }
+  .needle::after{ content:'🌡️'; position:absolute; right:-30px; top:-12px; font-size:24px; }
+  .oven{ font-size:120px; filter:drop-shadow(0 0 26px #ff8c1a); position:relative; }
+  .oven .cake{ position:absolute; left:50%; top:52%; transform:translate(-50%,-50%); font-size:56px; }
+  .flames{ position:absolute; left:0; right:0; bottom:6px; text-align:center; font-size:30px; opacity:.9; }
+
+  .zonelbl{ position:relative; z-index:3; color:#ffbe6b; font-weight:800; font-size:15px; margin-top:4px; min-height:20px; }
+  .fan{ position:relative; z-index:3; margin:12px 0 2px; border:none; cursor:pointer; font-size:20px; font-weight:800; color:#fff;
+    padding:18px 40px; border-radius:999px; background:radial-gradient(circle at 50% 26%, #ffa63d, #ff8c1a 40%, #b5340c);
+    box-shadow:0 8px 24px rgba(255,120,20,.6), inset 0 2px 0 rgba(255,255,255,.4); transition:transform .06s; touch-action:manipulation; }
+  .fan:active{ transform:scale(.93); }
+  .fan:disabled{ background:radial-gradient(circle at 50% 26%,#6b5a2a,#3a2f12); box-shadow:none; opacity:.7; }
+  .result{ position:relative; z-index:3; margin:10px 16px; min-height:24px; font-size:18px; font-weight:800; color:var(--gold); }
+  .backlink{ display:inline-block; margin:2px 0 14px; color:#cbb8ff; text-decoration:none; font-weight:700; position:relative; z-index:3;
+    border:1px solid rgba(255,215,120,.3); border-radius:999px; padding:9px 20px; }
+  .confetti{ position:fixed; top:-10px; font-size:22px; z-index:60; pointer-events:none; animation:fall linear forwards; }
+  @keyframes fall{ to{ transform:translateY(110vh) rotate(360deg); opacity:0; } }
+</style>
+</head>
+<body>
+  <h1>🔥 Giữ Lửa Như Giữ Job</h1>
+  <div class="sub">Nhấn liên tục để <b>quạt lò than</b>, giữ nhiệt trong vùng vàng suốt 10 giây. Giữ càng chuẩn, bánh càng ngon — càng nhiều lửa!</div>
+  <div class="hud">
+    <div class="box">⏱️ <span id="time">10</span>s</div>
+    <div class="box">🔥 độ chín <span id="cook">0</span>%</div>
+    <div class="box">🔥 <span id="bal">…</span></div>
+  </div>
+
+  <div class="stage">
+    <div class="gauge" id="gauge">
+      <div class="target" id="targetBand"></div>
+      <div class="needle" id="needle" style="bottom:0%"></div>
+    </div>
+    <div class="oven">🏮<div class="cake" id="cake">🥮</div><div class="flames" id="flames">🔥</div></div>
+  </div>
+  <div class="zonelbl" id="zonelbl"></div>
+
+  <button class="fan" id="fan">Bắt đầu nướng!</button>
+  <div class="result" id="result"></div>
+  <a class="backlink" href="/hub">← Về trang chính</a>
+
+  <script>
+    const timeEl = document.getElementById('time');
+    const cookEl = document.getElementById('cook');
+    const balEl = document.getElementById('bal');
+    const fanBtn = document.getElementById('fan');
+    const resultEl = document.getElementById('result');
+    const needle = document.getElementById('needle');
+    const band = document.getElementById('targetBand');
+    const zonelbl = document.getElementById('zonelbl');
+    const cake = document.getElementById('cake');
+    const flames = document.getElementById('flames');
+
+    const DURATION = 10000;      // ms
+    let playedToday = false, running = false, started = false;
+    let heat = 0;                // 0..100 current oven temperature
+    let inZoneMs = 0, totalMs = 0, lastT = 0, rafId = 0, endAt = 0;
+    // moving target band (centre + half-width, in 0..100 units)
+    let zoneCenter = 55, zoneHalf = 14, zoneDir = 1;
+
+    async function loadWallet(){
+      const r = await (await fetch('/api/wallet')).json();
+      if (!r.wallet){ location.href = '/'; return; }
+      playedToday = !r.wallet.canFortune;
+      balEl.textContent = r.wallet.balance;
+      if (playedToday){ fanBtn.disabled = true; fanBtn.textContent = 'Đã nướng hôm nay 🌙';
+        if(!resultEl.textContent) resultEl.textContent = 'Mai quay lại nướng mẻ mới nhé!'; }
+    }
+
+    function drawBand(){
+      const lo = Math.max(0, zoneCenter - zoneHalf), hi = Math.min(100, zoneCenter + zoneHalf);
+      band.style.bottom = lo + '%';
+      band.style.height = (hi - lo) + '%';
+    }
+    function setNeedle(){ needle.style.bottom = heat + '%'; }
+
+    // tap = fan the coals -> heat jumps up a bit each press
+    function fanPress(){ if (running) heat = Math.min(100, heat + 7); }
+    fanBtn.addEventListener('pointerdown', (e)=>{ if(!started){ start(); return; } fanPress(); });
+
+    function start(){
+      if (running || playedToday) return;
+      started = true; running = true;
+      heat = 30; inZoneMs = 0; totalMs = 0;
+      fanBtn.textContent = '💨 QUẠT! (nhấn liên tục)';
+      resultEl.textContent = '';
+      lastT = performance.now(); endAt = lastT + DURATION;
+      rafId = requestAnimationFrame(loop);
+    }
+
+    function loop(t){
+      const dt = t - lastT; lastT = t;
+      // heat naturally cools over time; fanning (taps) pushes it back up
+      heat = Math.max(0, heat - dt * 0.012);   // ~12/sec cooling
+      // drift the target band so it's not static (gentle bounce)
+      zoneCenter += zoneDir * dt * 0.004;
+      if (zoneCenter > 72){ zoneCenter = 72; zoneDir = -1; }
+      if (zoneCenter < 34){ zoneCenter = 34; zoneDir = 1; }
+      drawBand(); setNeedle();
+
+      const lo = zoneCenter - zoneHalf, hi = zoneCenter + zoneHalf;
+      const inZone = heat >= lo && heat <= hi;
+      totalMs += dt; if (inZone) inZoneMs += dt;
+      // feedback: cake browns as cook% rises; flames react to heat
+      const cook = Math.round(inZoneMs / DURATION * 100);
+      cookEl.textContent = Math.min(100, cook);
+      cake.textContent = inZone ? '🥮' : (heat > hi ? '🔥' : '🥮');
+      flames.textContent = heat > 75 ? '🔥🔥🔥' : heat > 40 ? '🔥🔥' : '🔥';
+      zonelbl.textContent = inZone ? '👌 Nhiệt chuẩn! Giữ đều tay!' : (heat > hi ? '🥵 Nóng quá, ngừng quạt!' : '🥶 Nguội rồi, quạt lên!');
+
+      const left = Math.max(0, endAt - t);
+      timeEl.textContent = Math.ceil(left/1000);
+      if (left <= 0){ finish(); return; }
+      rafId = requestAnimationFrame(loop);
+    }
+
+    async function finish(){
+      running = false; cancelAnimationFrame(rafId);
+      zonelbl.textContent = '';
+      const score = Math.max(0, Math.min(100, Math.round(inZoneMs / DURATION * 100)));
+      cake.textContent = score >= 70 ? '🥮' : score >= 40 ? '🥮' : '🍪';
+      try {
+        const resp = await fetch('/api/fortune/win', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ score }) });
+        if (resp.status === 401){ location.href = '/'; return; }
+        const r = await resp.json();
+        const grade = score >= 80 ? 'Bánh tuyệt hảo! 🌟' : score >= 55 ? 'Bánh ngon lắm! 😋' : score >= 30 ? 'Bánh tạm ổn 🙂' : 'Bánh hơi cháy 😅';
+        if (resp.ok){ resultEl.textContent = `${grade} Độ chín ${score}% → +${r.reward} lửa 🔥`; balEl.textContent = r.wallet.balance; confetti(); paintDone(); showCheer({delay:1000}); }
+        else { resultEl.textContent = 'Bạn đã nướng hôm nay rồi 🌙'; if(r.wallet) balEl.textContent = r.wallet.balance; paintDone(); }
+      } catch(e){ resultEl.textContent = 'Lỗi kết nối, thử lại nhé!'; started=false; fanBtn.textContent='Bắt đầu nướng!'; }
+    }
+    function paintDone(){ playedToday = true; fanBtn.disabled = true; fanBtn.textContent = 'Đã nướng hôm nay 🌙'; }
+
+    function confetti(){
+      const icons = ['🥮','🌕','✨','🔥','🌟'];
+      for (let i=0;i<20;i++){
+        const c = document.createElement('div');
+        c.className='confetti'; c.textContent = icons[i%icons.length];
+        c.style.left = Math.random()*100+'vw';
+        c.style.animationDuration = (1.4+Math.random()*1.4)+'s';
+        c.style.animationDelay = (Math.random()*0.4)+'s';
+        document.body.appendChild(c); setTimeout(()=>c.remove(), 3200);
+      }
+    }
+
+    drawBand(); setNeedle();
+    loadWallet();
+    window.addEventListener('pageshow', loadWallet);
+  </script>
+<script src="/cheer.js"></script>
+</body>
+</html>

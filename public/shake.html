@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Lac Long Den</title>
+<style>
+  :root{ --gold:#ffd77a; --gold2:#ffe9b0; --deep:#0a0620; --rim:#b5340c; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-user-select:none; user-select:none; }
+  body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    color:#fff; background:radial-gradient(130% 100% at 50% -10%, #2a1a5e 0%, var(--deep) 58%, #05030f 100%);
+    min-height:100vh; overflow-x:hidden; text-align:center; display:flex; flex-direction:column; align-items:center; }
+  body::after{ content:''; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.5;
+    background-image:radial-gradient(1.5px 1.5px at 20% 30%, #fff, transparent), radial-gradient(1.5px 1.5px at 70% 20%, #fff, transparent), radial-gradient(1px 1px at 40% 60%, #fff, transparent), radial-gradient(1.5px 1.5px at 85% 55%, #fff, transparent);
+    background-repeat:no-repeat; }
+  h1{ margin:22px 16px 4px; font-size:clamp(24px,6vw,38px); font-weight:800; position:relative; z-index:2;
+    background:linear-gradient(180deg,#fff6e2,var(--gold) 55%,#ff8c1a);
+    -webkit-background-clip:text; background-clip:text; color:transparent; text-shadow:0 0 34px rgba(255,180,80,.3); }
+  .sub{ color:#cbb8ff; font-size:14px; margin:0 20px; position:relative; z-index:2; max-width:340px; line-height:1.45; }
+  .bal{ margin-top:12px; font-weight:800; color:var(--gold2); font-size:17px; position:relative; z-index:2; }
+
+  .lantern{ position:relative; z-index:2; font-size:130px; margin:26px 0 8px; transition:transform .05s;
+    filter:drop-shadow(0 0 30px #ffb84d); }
+  .timer{ position:relative; z-index:2; font-size:52px; font-weight:900; color:#fff; min-height:60px; text-shadow:0 0 20px #ffd77a; }
+  .meter{ position:relative; z-index:2; width:min(80vw,300px); height:22px; border-radius:999px; margin:8px auto;
+    background:#241542; overflow:hidden; box-shadow:inset 0 0 0 2px #ffcf6a55; }
+  .meter i{ display:block; height:100%; width:0%; border-radius:999px;
+    background:linear-gradient(90deg,#ffe6a3,#ff8c1a,#ef5350); transition:width .1s; }
+
+  .b{ position:relative; z-index:2; margin-top:20px; border:none; cursor:pointer; font-size:22px; font-weight:800; color:#fff;
+    padding:16px 46px; border-radius:999px; background:radial-gradient(circle at 50% 26%, #ffa63d, #ff8c1a 40%, #b5340c);
+    box-shadow:0 8px 24px rgba(255,120,20,.6), inset 0 2px 0 rgba(255,255,255,.4); transition:transform .12s; }
+  .b:active{ transform:scale(.95); }
+  .b:disabled{ background:radial-gradient(circle at 50% 26%,#6b5a2a,#3a2f12); box-shadow:none; opacity:.7; }
+  .result{ margin:14px 16px; min-height:26px; font-size:20px; font-weight:800; color:var(--gold); position:relative; z-index:2; }
+  .backlink{ display:inline-block; margin:8px 6px 40px; color:#cbb8ff; text-decoration:none; font-weight:700; position:relative; z-index:2;
+    border:1px solid rgba(255,215,120,.3); border-radius:999px; padding:10px 22px; }
+  .win{ animation:pop .5s ease; }
+  @keyframes pop{ 0%{ transform:scale(.6); opacity:0 } 60%{ transform:scale(1.15) } 100%{ transform:scale(1); opacity:1 } }
+  .confetti{ position:fixed; top:-10px; font-size:22px; z-index:60; pointer-events:none; animation:fall linear forwards; }
+  @keyframes fall{ to{ transform:translateY(110vh) rotate(360deg); opacity:0; } }
+</style>
+</head>
+<body>
+  <h1>🏮 Lắc Đi Cho Hết Căng</h1>
+  <div class="sub" id="sub">Lắc điện thoại thật mạnh trong 5 giây — lắc càng mạnh, càng nhiều lửa! 🔥</div>
+  <div class="bal" id="bal">🔥 …</div>
+
+  <div class="lantern" id="lantern">🏮</div>
+  <div class="timer" id="timer"></div>
+  <div class="meter"><i id="meterFill"></i></div>
+
+  <button class="b" id="go">Bắt đầu lắc!</button>
+  <div class="result" id="result"></div>
+  <br>
+  <a class="backlink" href="/hub">← Về trang chính</a>
+
+  <script>
+    // identity comes from the Google session cookie now; no localStorage id.
+
+    const balEl = document.getElementById('bal');
+    const goBtn = document.getElementById('go');
+    const resultEl = document.getElementById('result');
+    const timerEl = document.getElementById('timer');
+    const meterFill = document.getElementById('meterFill');
+    const lantern = document.getElementById('lantern');
+    const subEl = document.getElementById('sub');
+
+    const DURATION = 5000;      // shake window (ms)
+    let playedToday = false, busy = false;
+    let shakeAccum = 0, lastAcc = null, running = false;
+    let noMotion = false;       // desktop / no sensor -> fall back to tapping
+
+    async function loadWallet(){
+      const r = await (await fetch('/api/wallet')).json();
+      if (!r.wallet){ location.href = '/'; return; }
+      paint(r.wallet);
+    }
+    function paint(w){
+      playedToday = !w.canShake;
+      balEl.textContent = '🔥 ' + w.balance + ' lửa';
+      if (playedToday){ goBtn.disabled = true; goBtn.textContent = 'Đã chơi hôm nay 🌙';
+        if(!resultEl.textContent) resultEl.textContent = 'Mai quay lại lắc tiếp nhé!'; }
+    }
+
+    function onMotion(e){
+      if (!running) return;
+      const a = e.accelerationIncludingGravity || e.acceleration;
+      if (!a) return;
+      if (lastAcc){
+        const d = Math.abs(a.x-lastAcc.x) + Math.abs(a.y-lastAcc.y) + Math.abs(a.z-lastAcc.z);
+        if (d > 4){ shakeAccum += d; lantern.style.transform = `rotate(${(Math.random()*30-15)}deg) scale(1.06)`; }
+      }
+      lastAcc = { x:a.x||0, y:a.y||0, z:a.z||0 };
+    }
+    // desktop fallback: rapid tapping on the lantern counts as "shaking"
+    lantern.addEventListener('click', ()=>{ if(running && noMotion){ shakeAccum += 18; lantern.style.transform = `scale(1.12)`; setTimeout(()=>lantern.style.transform='',80);} });
+
+    async function start(){
+      if (busy || playedToday) return;
+      // iOS 13+ needs an explicit permission request from a user gesture
+      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function'){
+        try { const p = await DeviceMotionEvent.requestPermission(); if (p !== 'granted') noMotion = true; }
+        catch(e){ noMotion = true; }
+      } else if (typeof DeviceMotionEvent === 'undefined'){
+        noMotion = true;
+      }
+      if (noMotion) subEl.textContent = 'Máy không có cảm biến — CHẠM LIÊN TỤC vào lồng đèn thật nhanh! 🏮';
+      window.addEventListener('devicemotion', onMotion);
+
+      busy = true; running = true; shakeAccum = 0; lastAcc = null;
+      goBtn.disabled = true; resultEl.textContent = '';
+      let left = Math.ceil(DURATION/1000);
+      timerEl.textContent = left;
+      const iv = setInterval(()=>{ left--; timerEl.textContent = left>0?left:'⏰'; }, 1000);
+      // live meter based on accumulated shake (cap for display)
+      const mv = setInterval(()=>{ meterFill.style.width = Math.min(100, shakeAccum/12) + '%'; }, 100);
+
+      setTimeout(async ()=>{
+        clearInterval(iv); clearInterval(mv); running = false;
+        window.removeEventListener('devicemotion', onMotion);
+        lantern.style.transform = '';
+        // map accumulated shake to a 0..100 score. ~1200 units in 5s = full bar.
+        const score = Math.max(0, Math.min(100, Math.round(shakeAccum/12)));
+        meterFill.style.width = score + '%';
+        timerEl.textContent = '';
+        try {
+          const resp = await fetch('/api/shake/win', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ score }) });
+          if (resp.status === 401){ location.href = '/'; return; }
+          const r = await resp.json();
+          if (resp.ok){ resultEl.textContent = `💪 Điểm ${score}! Bạn nhận được ${r.reward} lửa 🔥`; resultEl.classList.add('win'); confetti(); paint(r.wallet); showCheer({delay:1000}); }
+          else { if(r.wallet) paint(r.wallet); resultEl.textContent = 'Bạn đã chơi hôm nay rồi 🌙'; }
+        } catch(e){ resultEl.textContent = 'Lỗi kết nối, thử lại nhé!'; goBtn.disabled = false; }
+        busy = false;
+      }, DURATION);
+    }
+
+    function confetti(){
+      const icons = ['🏮','🌕','✨','🔥','🌟'];
+      for (let i=0;i<20;i++){
+        const c = document.createElement('div');
+        c.className='confetti'; c.textContent = icons[i%icons.length];
+        c.style.left = Math.random()*100+'vw';
+        c.style.animationDuration = (1.4+Math.random()*1.4)+'s';
+        c.style.animationDelay = (Math.random()*0.4)+'s';
+        document.body.appendChild(c); setTimeout(()=>c.remove(), 3200);
+      }
+    }
+
+    goBtn.addEventListener('click', start);
+    window.addEventListener('pageshow', loadWallet);
+    loadWallet();
+  </script>
+<script src="/cheer.js"></script>
+</body>
+</html>
