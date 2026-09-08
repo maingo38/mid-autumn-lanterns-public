@@ -180,6 +180,11 @@ db.exec(`CREATE TABLE IF NOT EXISTS games (
 // testing switch: SPIN_UNLIMITED=1 lets everyone spin as many times as they want
 // (fires still accumulate in the wallet). Default off = one spin per person/day.
 const SPIN_UNLIMITED = process.env.SPIN_UNLIMITED === '1';
+// GAMES_UNLIMITED=1 lifts the once-per-day cap on ALL games (for testing).
+// Implemented by tagging the day key with a timestamp so UNIQUE never collides.
+const GAMES_UNLIMITED = process.env.GAMES_UNLIMITED === '1';
+// the day-key a game row is stored under; unlimited => unique each play
+function gameDay(day){ return GAMES_UNLIMITED ? day + '#' + Date.now() + Math.random().toString(36).slice(2,6) : day; }
 
 // local calendar day, e.g. "2026-09-04" — the reset boundary for the whole game
 function today() {
@@ -232,10 +237,11 @@ function wallet(voter, day) {
   const played = {}; playedRows.forEach(r => played[r.game] = true);
   const fired  = db.prepare('SELECT lantern FROM fires WHERE voter=? AND day=?').all(voter, day).map(r => r.lantern);
   const earnedToday = db.prepare('SELECT COALESCE(SUM(reward),0) AS n FROM spins WHERE voter=? AND day=?').get(voter, day).n;
+  const U = GAMES_UNLIMITED;
   return { balance: earned - spent, earned, spent, earnedToday,
-           canSpin: SPIN_UNLIMITED || !spun, canPuzzle: !puzzled,
-           canShake: !played.shake, canQuiz: !played.quiz,
-           canFortune: !played.fortune, canCatch: !played.catch,
+           canSpin: SPIN_UNLIMITED || U || !spun, canPuzzle: U || !puzzled,
+           canShake: U || !played.shake, canQuiz: U || !played.quiz,
+           canFortune: U || !played.fortune, canCatch: U || !played.catch,
            firedToday: fired, days: spinDays(voter) };
 }
 
@@ -430,7 +436,7 @@ app.get('/api/leaderboard', (req, res) => {
 app.post('/api/spin', requireAuth, (req, res) => {
   const day = today();
   const v = req.user.sub;
-  if (!SPIN_UNLIMITED && db.prepare('SELECT 1 FROM spins WHERE voter=? AND day=?').get(v, day)) {
+  if (!SPIN_UNLIMITED && !GAMES_UNLIMITED && db.prepare('SELECT 1 FROM spins WHERE voter=? AND day=?').get(v, day)) {
     return res.status(409).json({ error: 'already_spun', wallet: wallet(v, day) });
   }
   const segment = Math.floor(Math.random() * WHEEL.length);
@@ -456,7 +462,7 @@ app.post('/api/puzzle/win', requireAuth, (req, res) => {
   const score = Math.max(0, Math.min(100, Number(req.body?.score) || 0));
   const reward = Math.max(1, Math.round(score / 100 * PUZZLE_MAX_REWARD));
   const r = db.prepare('INSERT OR IGNORE INTO puzzles (voter, day, reward, created) VALUES (?, ?, ?, ?)')
-    .run(v, day, reward, Date.now());
+    .run(v, gameDay(day), reward, Date.now());
   if (r.changes === 0) return res.status(409).json({ error: 'already_won', wallet: wallet(v, day) });
   res.json({ ok: true, reward, score, wallet: wallet(v, day) });
 });
@@ -469,7 +475,7 @@ app.post('/api/shake/win', requireAuth, (req, res) => {
   const score = Math.max(0, Math.min(100, Number(req.body?.score) || 0));
   const reward = Math.max(1, Math.round(score / 100 * SHAKE_MAX_REWARD));
   const r = db.prepare("INSERT OR IGNORE INTO games (voter, day, game, reward, data, created) VALUES (?, ?, 'shake', ?, ?, ?)")
-    .run(v, day, reward, JSON.stringify({ score }), Date.now());
+    .run(v, gameDay(day), reward, JSON.stringify({ score }), Date.now());
   if (r.changes === 0) return res.status(409).json({ error: 'already_played', wallet: wallet(v, day) });
   res.json({ ok: true, reward, score, wallet: wallet(v, day) });
 });
@@ -481,7 +487,7 @@ app.post('/api/quiz/win', requireAuth, (req, res) => {
   const v = req.user.sub;
   const result = (req.body?.result || '').toString().slice(0, 40);
   const r = db.prepare("INSERT OR IGNORE INTO games (voter, day, game, reward, data, created) VALUES (?, ?, 'quiz', ?, ?, ?)")
-    .run(v, day, QUIZ_REWARD, JSON.stringify({ result }), Date.now());
+    .run(v, gameDay(day), QUIZ_REWARD, JSON.stringify({ result }), Date.now());
   if (r.changes === 0) return res.status(409).json({ error: 'already_played', wallet: wallet(v, day) });
   res.json({ ok: true, reward: QUIZ_REWARD, wallet: wallet(v, day) });
 });
@@ -494,7 +500,7 @@ app.post('/api/fortune/win', requireAuth, (req, res) => {
   const score = Math.max(0, Math.min(100, Number(req.body?.score) || 0));
   const reward = Math.max(1, Math.round(score / 100 * BAKE_MAX_REWARD));
   const r = db.prepare("INSERT OR IGNORE INTO games (voter, day, game, reward, data, created) VALUES (?, ?, 'fortune', ?, ?, ?)")
-    .run(v, day, reward, JSON.stringify({ score }), Date.now());
+    .run(v, gameDay(day), reward, JSON.stringify({ score }), Date.now());
   if (r.changes === 0) return res.status(409).json({ error: 'already_played', wallet: wallet(v, day) });
   res.json({ ok: true, reward, score, wallet: wallet(v, day) });
 });
@@ -507,7 +513,7 @@ app.post('/api/catch/win', requireAuth, (req, res) => {
   const score = Math.max(0, Math.min(100, Number(req.body?.score) || 0));
   const reward = Math.max(1, Math.round(score / 100 * CATCH_MAX_REWARD));
   const r = db.prepare("INSERT OR IGNORE INTO games (voter, day, game, reward, data, created) VALUES (?, ?, 'catch', ?, ?, ?)")
-    .run(v, day, reward, JSON.stringify({ score }), Date.now());
+    .run(v, gameDay(day), reward, JSON.stringify({ score }), Date.now());
   if (r.changes === 0) return res.status(409).json({ error: 'already_played', wallet: wallet(v, day) });
   res.json({ ok: true, reward, score, wallet: wallet(v, day) });
 });
