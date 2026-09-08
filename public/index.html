@@ -465,12 +465,20 @@ async function showMyLantern(){
 // on load: ask the server who we are. Signed in -> skip to their lantern or the
 // welcome/draw flow. Not signed in -> render the Google button on the login scene.
 async function initAuth(){
-  let clientId = null;
+  let clientId = null, guestMode = false;
   try {
     const r = await (await fetch('/api/me')).json();
-    me = r.user; clientId = r.clientId;
+    me = r.user; clientId = r.clientId; guestMode = r.guestMode;
   } catch(e){}
   if (me){ afterLogin(); return; }
+  // TEST MODE: no Google — mint a guest session and go straight in
+  if (guestMode){
+    try {
+      const r = await fetch('/api/auth/guest', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({}) });
+      const data = await r.json();
+      if (r.ok){ me = data.user; afterLogin(); return; }
+    } catch(e){}
+  }
   // render the Google button; GIS may still be loading, so poll briefly
   let tries = 0;
   (function renderBtn(){

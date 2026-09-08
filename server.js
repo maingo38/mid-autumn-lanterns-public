@@ -27,6 +27,9 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ||
 // is a fixed string so restarts don't log everyone out during testing.
 const SESSION_SECRET = process.env.SESSION_SECRET || 'mid-autumn-dev-secret-change-me';
 const SESSION_DAYS = 7;   // covers the whole 5-day event with margin
+// GUEST_MODE=1 lets people in WITHOUT Google (for testing). Each browser gets a
+// random guest identity; everything else (1 lantern/account, wallet, games) works.
+const GUEST_MODE = process.env.GUEST_MODE === '1';
 
 // ── Background removal ─────────────────────────────────────────────
 // gpt-image-2 paints a solid (usually near-white/grey) backdrop. We flood-fill
@@ -350,7 +353,20 @@ app.post('/api/auth/google', async (req, res) => {
 // who am I (client calls on load to decide login vs draw)
 app.get('/api/me', (req, res) => {
   res.json({ user: req.user ? { sub: req.user.sub, email: req.user.email, name: req.user.name, picture: req.user.picture } : null,
-             clientId: GOOGLE_CLIENT_ID });
+             clientId: GOOGLE_CLIENT_ID, guestMode: GUEST_MODE });
+});
+// testing bypass: mint a guest session (only when GUEST_MODE is on)
+app.post('/api/auth/guest', (req, res) => {
+  if (!GUEST_MODE) return res.status(403).json({ error: 'guest_disabled' });
+  const sub = 'guest_' + crypto.randomBytes(9).toString('base64url');
+  const name = (req.body?.name || 'Khách').toString().slice(0,16);
+  db.prepare(`INSERT INTO users (sub,email,name,picture,created) VALUES (?,?,?,?,?)
+    ON CONFLICT(sub) DO NOTHING`).run(sub, '', name, null, Date.now());
+  const exp = Date.now() + SESSION_DAYS*24*3600*1000;
+  const token = signSession({ sub, email:'', name, picture:null, exp });
+  res.setHeader('Set-Cookie',
+    `ml_session=${encodeURIComponent(token)}; Path=/; Max-Age=${SESSION_DAYS*24*3600}; HttpOnly; SameSite=Lax`);
+  res.json({ ok: true, user: { sub, name } });
 });
 app.post('/api/auth/logout', (req, res) => {
   res.setHeader('Set-Cookie', 'ml_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
