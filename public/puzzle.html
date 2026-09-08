@@ -248,17 +248,23 @@
       ctx.restore();
     }
 
+    let finishing = false;
     async function finish(){
+      if (finishing) return;            // guard: never run the end sequence twice
+      finishing = true;
       running = false; cancelAnimationFrame(rafId); clearInterval(tickId);
       const score = Math.max(0, Math.min(100, Math.round(goals / GOAL_TARGET * 100)));
+      playedToday = true; goBtn.disabled = true; goBtn.textContent = 'Đã chơi hôm nay 🌙';
+      resultEl.textContent = `🎉 Vào đích ${goals} lần!`;   // show result immediately
+      confetti();
       try {
         const resp = await fetch('/api/puzzle/win', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ score }) });
         if (resp.status === 401){ location.href = '/'; return; }
         const r = await resp.json();
-        if (resp.ok){ resultEl.textContent = `🎉 Vào đích ${goals} lần! Nhận ${r.reward} lửa 🔥`; balEl.textContent = r.wallet.balance; confetti(); showCheer({delay:1000}); }
-        else { resultEl.textContent = 'Bạn đã chơi hôm nay rồi 🌙'; if(r.wallet) balEl.textContent = r.wallet.balance; showCheer({delay:800}); }
-      } catch(e){ resultEl.textContent = 'Lỗi kết nối, thử lại nhé!'; started=false; goBtn.disabled=false; goBtn.textContent='Bắt đầu!'; return; }
-      playedToday = true; goBtn.disabled = true; goBtn.textContent = 'Đã chơi hôm nay 🌙';
+        if (resp.ok){ resultEl.textContent = `🎉 Vào đích ${goals} lần! Nhận ${r.reward} lửa 🔥`; if(r.wallet) balEl.textContent = r.wallet.balance; }
+        else { resultEl.textContent = 'Bạn đã chơi hôm nay rồi 🌙'; if(r.wallet) balEl.textContent = r.wallet.balance; }
+      } catch(e){ /* mạng trục trặc — vẫn cho về trang chính, không kẹt */ }
+      showCheer({delay:900});          // always end with the message + back to hub
     }
 
     // ---- controls ----
