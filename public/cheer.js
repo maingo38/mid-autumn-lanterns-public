@@ -2,21 +2,44 @@
 // Usage: include this file, then call showCheer() when a reward lands.
 (function(){
   const LINES = [
+    // cà khịa công sở
     'Chơi xong rồi, giờ mở laptop lên "chơi" tiếp với deadline nhé! 💻',
     'Nạp đủ vía may mắn — hôm nay meeting nào cũng cân hết! 💪',
     'Lửa đã có, năng lượng đã đầy, đi bào KPI thôi nào! 🔥',
     'Bạn vừa xả stress hợp lệ trong giờ làm. Sếp không biết đâu 🤫',
-    'Trung Thu vui vẻ! Nhớ là cà phê chưa uống thì đừng nhận task gấp nha ☕',
     'Xong! Giờ giả vờ bận rộn thêm 5 phút rồi hẵng làm việc 😎',
-    'Chúc bạn một ngày ít email, nhiều bánh, không ai gọi họp gấp! 🥮',
-    'Bạn xứng đáng được nghỉ tay — à mà nghỉ xong nhớ làm việc lại nhé 🌙',
-    'Đủ lửa rồi đó! Đem nhiệt huyết này đi "chốt" nốt việc còn dang dở 🏮',
-    'Hôm nay bạn đã làm 1 việc có ích: chơi game. Việc còn lại tính sau 🎉',
-    'Vui lên nào! Cuối tháng lương về, cuối năm thưởng về (chắc vậy) 🧧',
-    'Nghỉ giải lao xong, chiến tiếp! Chú Cuội cũng đang cày trên cung trăng kìa 🌕',
-    'Bạn vừa +EXP tinh thần. Giờ đi apply cho công việc thật nhé! ✨',
+    'Đủ lửa rồi đó! Đem nhiệt huyết này đi "chốt" nốt việc dang dở 🏮',
+    'Hôm nay bạn đã làm 1 việc có ích: chơi game. Việc kia tính sau 🎉',
     'Thở sâu, cười tươi, và... mở lại cái tab công việc vừa ẩn đi 😅',
+    'Report chưa xong nhưng tinh thần đã xong. Ổn! 📊',
+    'Sếp hỏi "đang làm gì đó?" — bảo "đang nạp năng lượng sáng tạo" 🧠',
+    'Họp 3 tiếng không bằng chơi 3 phút. Nhưng thôi, đi họp đi 🥲',
+    'Deadline gần kề? Kệ, Trung Thu mà, xơi miếng bánh đã 🥮',
+    'Bạn của tháng này: người vừa chơi game xong. Chính là bạn 🏆',
+    'Inbox có 47 mail chưa đọc. Nhưng giờ là giờ của bạn ✨',
+    'Làm hết mình, chơi hết lửa. Cân bằng cuộc sống là đây chứ đâu ⚖️',
+    // dễ thương / Trung Thu
+    'Chúc bạn một ngày ít email, nhiều bánh, không ai gọi họp gấp! 🥮',
+    'Bạn xứng đáng được nghỉ tay — nghỉ xong nhớ làm việc lại nhé 🌙',
+    'Vui lên nào! Cuối tháng lương về, cuối năm thưởng về (chắc vậy) 🧧',
+    'Chú Cuội cũng đang cày trên cung trăng kìa — mình cố nốt nhé 🌕',
     'Chúc bạn deadline nào cũng "nhẹ như bánh dẻo" 🎐',
+    'Trăng tròn, lòng an, việc gì rồi cũng xong thôi 🌕',
+    'Chị Hằng gửi lời chúc: hôm nay của bạn thật nhiều tiếng cười 💛',
+    'Thỏ Ngọc chúc bạn nhảy việc... à nhầm, nhảy qua deadline nhẹ nhàng 🐰',
+    'Một miếng bánh, một ngụm trà, một ngày an lành nha 🍵',
+    'Đèn lồng của bạn đang sáng trên bầu trời rồi đó — ngước lên xem nhé 🏮',
+    // tạo động lực (xàm mà vui)
+    'Bạn vừa +10 EXP tinh thần. Level up! Giờ đi cày tiếp 🎮',
+    'Tin vui: bạn giỏi game. Tin buồn: việc vẫn ở đó. Cân cả hai nào 💪',
+    'Nghiên cứu cho thấy: người chơi game xong làm việc vui hơn. (Mình bịa) 🤓',
+    'Sạc pin tinh thần: 100%. Đủ dùng tới giờ tan làm 🔋',
+    'Vũ trụ đã ghi nhận sự cố gắng của bạn hôm nay ✨',
+    'Hôm nay bạn toả sáng như đèn lồng — đừng để ai tắt nhé 🏮',
+    'Cười một cái coi! Ngày dài nhưng bạn dài hơi hơn 😄',
+    'Bạn làm được! (câu này áp dụng cho cả deadline lẫn miếng bánh cuối) 🥮',
+    'Giữ vibe này nha — mang qua cuộc họp tiếp theo luôn 🎊',
+    'Xong game, xong lo. Việc còn lại chỉ là chuyện nhỏ 🌟',
   ];
 
   function ensureStyle(){
