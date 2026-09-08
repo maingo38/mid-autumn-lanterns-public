@@ -185,7 +185,7 @@
           const resp = await fetch('/api/quiz/win', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ result: best }) });
           if (resp.status === 401){ location.href = '/'; return; }
           const r = await resp.json();
-          if (resp.ok){ rewardLine = '<div class="reward">+' + r.reward + ' lửa 🔥</div>'; balEl.textContent = '🔥 ' + r.wallet.balance + ' lửa'; playedToday = true; confetti(); showCheer({delay:1200}); }
+          if (resp.ok){ rewardLine = '<div class="reward">+' + r.reward + ' lửa 🔥</div>'; balEl.textContent = '🔥 ' + r.wallet.balance + ' lửa'; playedToday = true; confetti(); showCheer({delay:4500}); }
           else if (r.wallet){ balEl.textContent = '🔥 ' + r.wallet.balance + ' lửa'; playedToday = true; }
         } catch(e){}
       } else {
