@@ -256,7 +256,7 @@
         if (resp.status === 401){ location.href = '/'; return; }
         const r = await resp.json();
         if (resp.ok){ resultEl.textContent = `🎉 Vào đích ${goals} lần! Nhận ${r.reward} lửa 🔥`; balEl.textContent = r.wallet.balance; confetti(); showCheer({delay:1000}); }
-        else { resultEl.textContent = 'Bạn đã chơi hôm nay rồi 🌙'; if(r.wallet) balEl.textContent = r.wallet.balance; }
+        else { resultEl.textContent = 'Bạn đã chơi hôm nay rồi 🌙'; if(r.wallet) balEl.textContent = r.wallet.balance; showCheer({delay:800}); }
       } catch(e){ resultEl.textContent = 'Lỗi kết nối, thử lại nhé!'; started=false; goBtn.disabled=false; goBtn.textContent='Bắt đầu!'; return; }
       playedToday = true; goBtn.disabled = true; goBtn.textContent = 'Đã chơi hôm nay 🌙';
     }

@@ -165,10 +165,13 @@
     async function spin(){
       if (busy || !canSpin) return;
       busy = true; btn.disabled = true; resultEl.textContent = '';
-      const resp = await fetch('/api/spin', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({}) });
-      if (resp.status === 401){ location.href = '/'; return; }
-      const r = await resp.json();
-      if (!resp.ok){ busy=false; if(r.wallet) paintWallet(r.wallet); return; }
+      let resp, r;
+      try {
+        resp = await fetch('/api/spin', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({}) });
+        if (resp.status === 401){ location.href = '/'; return; }
+        r = await resp.json();
+      } catch(e){ busy=false; btn.disabled=false; resultEl.textContent='Lỗi kết nối, thử lại nhé!'; return; }
+      if (!resp.ok){ busy=false; if(r && r.wallet) paintWallet(r.wallet); if(r && r.error==='already_spun') showCheer({delay:400}); return; }
       if (r.wheel) wheelVals = r.wheel;
 
       const seg = 360/wheelVals.length;

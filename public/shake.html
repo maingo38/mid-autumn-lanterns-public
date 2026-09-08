@@ -129,7 +129,7 @@
           if (resp.status === 401){ location.href = '/'; return; }
           const r = await resp.json();
           if (resp.ok){ resultEl.textContent = `💪 Điểm ${score}! Bạn nhận được ${r.reward} lửa 🔥`; resultEl.classList.add('win'); confetti(); paint(r.wallet); showCheer({delay:1000}); }
-          else { if(r.wallet) paint(r.wallet); resultEl.textContent = 'Bạn đã chơi hôm nay rồi 🌙'; }
+          else { if(r.wallet) paint(r.wallet); resultEl.textContent = 'Bạn đã chơi hôm nay rồi 🌙'; showCheer({delay:800}); }
         } catch(e){ resultEl.textContent = 'Lỗi kết nối, thử lại nhé!'; goBtn.disabled = false; }
         busy = false;
       }, DURATION);

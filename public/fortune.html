@@ -155,7 +155,7 @@
         const r = await resp.json();
         const grade = score >= 80 ? 'Bánh tuyệt hảo! 🌟' : score >= 55 ? 'Bánh ngon lắm! 😋' : score >= 30 ? 'Bánh tạm ổn 🙂' : 'Bánh hơi cháy 😅';
         if (resp.ok){ resultEl.textContent = `${grade} Độ chín ${score}% → +${r.reward} lửa 🔥`; balEl.textContent = r.wallet.balance; confetti(); paintDone(); showCheer({delay:1000}); }
-        else { resultEl.textContent = 'Bạn đã nướng hôm nay rồi 🌙'; if(r.wallet) balEl.textContent = r.wallet.balance; paintDone(); }
+        else { resultEl.textContent = 'Bạn đã nướng hôm nay rồi 🌙'; if(r.wallet) balEl.textContent = r.wallet.balance; paintDone(); showCheer({delay:800}); }
       } catch(e){ resultEl.textContent = 'Lỗi kết nối, thử lại nhé!'; started=false; fanBtn.textContent='Bắt đầu nướng!'; }
     }
     function paintDone(){ playedToday = true; fanBtn.disabled = true; fanBtn.textContent = 'Đã nướng hôm nay 🌙'; }

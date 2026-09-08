@@ -50,12 +50,14 @@
       const card = document.createElement('div'); card.className = 'cheerCard';
       const em = document.createElement('div'); em.className='em'; em.textContent='🌟';
       const msg = document.createElement('div'); msg.className='msg'; msg.textContent = line;
-      const btn = document.createElement('button'); btn.className='ok'; btn.textContent='Đi làm thôi! 🚀';
+      const btn = document.createElement('button'); btn.className='ok'; btn.textContent='Về trang chính 🏠';
       card.appendChild(em); card.appendChild(msg); card.appendChild(btn);
       wrap.appendChild(card); document.body.appendChild(wrap);
-      const close = ()=> wrap.remove();
-      btn.addEventListener('click', close);
-      wrap.addEventListener('click', e=>{ if(e.target===wrap) close(); });
+      // after reading the message, go back to the hub (main page)
+      const dest = opts.back || '/hub';
+      const go = ()=>{ wrap.remove(); location.href = dest; };
+      btn.addEventListener('click', go);
+      wrap.addEventListener('click', e=>{ if(e.target===wrap) go(); });
     };
     if (opts.delay) setTimeout(run, opts.delay); else run();
   };

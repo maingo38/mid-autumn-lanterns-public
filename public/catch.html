@@ -115,7 +115,7 @@
         if (resp.status === 401){ location.href = '/'; return; }
         const r = await resp.json();
         if (resp.ok){ resultEl.textContent = `🎉 Bắt được ${score}! Nhận ${r.reward} lửa 🔥`; balEl.textContent = r.wallet.balance; confetti(); paintDone(); showCheer({delay:1000}); }
-        else { resultEl.textContent = 'Bạn đã chơi hôm nay rồi 🌙'; if(r.wallet) balEl.textContent = r.wallet.balance; paintDone(); }
+        else { resultEl.textContent = 'Bạn đã chơi hôm nay rồi 🌙'; if(r.wallet) balEl.textContent = r.wallet.balance; paintDone(); showCheer({delay:800}); }
       } catch(e){ resultEl.textContent = 'Lỗi kết nối, thử lại nhé!'; goBtn.disabled = false; }
     }
     function paintDone(){ playedToday = true; goBtn.disabled = true; goBtn.textContent = 'Đã chơi hôm nay 🌙'; }
