@@ -8,7 +8,7 @@
   :root{ --gold:#ffd77a; --gold2:#ffe9b0; --deep:#0a0620; }
   *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-user-select:none; user-select:none; }
   body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-    color:#fff; background:radial-gradient(130% 100% at 50% -10%, #2a1a5e 0%, var(--deep) 58%, #05030f 100%);
+    color:#fff; background:#0d0a26 url('/decor/Background.jpeg') center top / cover no-repeat fixed;
     min-height:100vh; overflow:hidden; text-align:center; display:flex; flex-direction:column; align-items:center; }
   h1{ margin:18px 16px 2px; font-size:clamp(22px,5.4vw,32px); font-weight:800; position:relative; z-index:3;
     background:linear-gradient(180deg,#fff6e2,var(--gold) 55%,#ff8c1a);
@@ -30,16 +30,19 @@
     box-shadow:0 8px 24px rgba(255,120,20,.6); transition:transform .12s; }
   .b:active{ transform:scale(.95); }
   .b:disabled{ background:radial-gradient(circle at 50% 26%,#6b5a2a,#3a2f12); box-shadow:none; opacity:.7; }
-  .result{ position:relative; z-index:3; margin:8px 16px; min-height:24px; font-size:18px; font-weight:800; color:var(--gold); }
+  .result{ position:relative; z-index:3; margin:8px 16px; min-height:24px; font-size:18px; font-weight:800; color:var(--gold); line-height:1.5; }
   .backlink{ display:inline-block; margin:4px 0 16px; color:#cbb8ff; text-decoration:none; font-weight:700; position:relative; z-index:3;
     border:1px solid rgba(255,215,120,.3); border-radius:999px; padding:9px 20px; }
   .confetti{ position:fixed; top:-10px; font-size:22px; z-index:60; pointer-events:none; animation:fall linear forwards; }
   @keyframes fall{ to{ transform:translateY(110vh) rotate(360deg); opacity:0; } }
+  /* lu1edbp phu1ee7 tu1889 nhu1eb9 tru00ean nu1ec1n demo -> chu1eef du1ec5 u0111u1ecdc */
+  body::before{ content:''; position:fixed; inset:0; z-index:0; pointer-events:none;
+    background:linear-gradient(180deg, #0a081e33 0%, #0a081e66 55%, #0a081eaa 100%); }
 </style>
 </head>
 <body>
   <h1>🐰 Chốt Deal Bắt Thỏ</h1>
-  <div class="sub">Chạm bắt thỏ &amp; bánh trong 12 giây — càng nhiều càng nhiều lửa! (Tránh 💣)</div>
+  <div class="sub">Chạm bắt thỏ &amp; bánh trong 12 giây — bắt trúng càng nhiều %, càng nhiều lửa! ≥80% = 4🔥, 50-79% = 3🔥, &lt;50% = 2🔥 (Tránh 💣)</div>
   <div class="hud">
     <div class="box">⏱️ <span id="time">12</span>s</div>
     <div class="box">🎯 <span id="score">0</span></div>
@@ -61,9 +64,13 @@
     const resultEl = document.getElementById('result');
 
     const DURATION = 12;          // seconds
-    const GOODS = ['🐰','🥮','🏮','🌕'];
+    const GOODS = ['🐰','🐰','🐰','🥮','🏮','🌕'];   // rabbit-heavy
     const BOMB = '💣';
+    const SPAWN_MS = 440;         // a touch slower than 360, still lively
+    const LIFE_MS = 1000;         // a bit more time to tap
+    const BATCH = 2;              // spawn a couple at a time -> more on screen
     let playedToday = false, running = false, score = 0, spawnTimer = null, tickTimer = null;
+    let goodsSpawned = 0, goodsCaught = 0;   // for catch-rate %
 
     async function loadWallet(){
       const r = await (await fetch('/api/wallet')).json();
@@ -74,11 +81,12 @@
         if(!resultEl.textContent) resultEl.textContent = 'Mai quay lại bắt tiếp nhé!'; }
     }
 
-    function spawn(){
-      const isBomb = Math.random() < 0.2;
+    function spawnOne(){
+      const isBomb = Math.random() < 0.18;
       const el = document.createElement('div');
       el.className = 'target';
       el.textContent = isBomb ? BOMB : GOODS[Math.floor(Math.random()*GOODS.length)];
+      if (!isBomb) goodsSpawned++;            // denominator for catch-rate %
       const pad = 40;
       const x = pad + Math.random()*(arena.clientWidth - pad*2);
       const y = pad + Math.random()*(arena.clientHeight - pad*2);
@@ -86,21 +94,23 @@
       el.addEventListener('click', ()=>{
         if (!running) return;
         if (isBomb){ score = Math.max(0, score-2); flash('#ff6b6b'); }
-        else { score++; }
+        else { score++; goodsCaught++; }
         scoreEl.textContent = score;
         el.remove();
       }, { once:true });
       arena.appendChild(el);
-      setTimeout(()=>el.remove(), 1100);   // disappears if not tapped
+      setTimeout(()=>el.remove(), LIFE_MS);   // disappears if not tapped
     }
+    function spawn(){ const n = 1 + Math.floor(Math.random()*BATCH); for(let i=0;i<n;i++) spawnOne(); }
     function flash(c){ arena.style.boxShadow = 'inset 0 0 40px ' + c; setTimeout(()=>arena.style.boxShadow='', 150); }
 
     async function start(){
       if (running || playedToday) return;
       running = true; score = 0; scoreEl.textContent = '0';
+      goodsSpawned = 0; goodsCaught = 0;
       goBtn.disabled = true; resultEl.textContent = '';
       let left = DURATION; timeEl.textContent = left;
-      spawnTimer = setInterval(spawn, 620);
+      spawnTimer = setInterval(spawn, SPAWN_MS);
       tickTimer = setInterval(()=>{ left--; timeEl.textContent = left; if(left<=0) finish(); }, 1000);
     }
 
@@ -108,14 +118,19 @@
       running = false;
       clearInterval(spawnTimer); clearInterval(tickTimer);
       arena.querySelectorAll('.target').forEach(e=>e.remove());
-      // map catches to a 0..100 score. ~15 catches in 12s = full.
-      const s = Math.max(0, Math.min(100, Math.round(score/15*100)));
+      // catch rate % = good icons caught / good icons spawned (bombs don't count)
+      const pct = goodsSpawned > 0 ? Math.round(goodsCaught/goodsSpawned*100) : 0;
+      const tier = pct >= 80 ? '≥80%' : pct >= 50 ? '50–79%' : '<50%';
       try {
-        const resp = await fetch('/api/catch/win', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ score: s }) });
+        const resp = await fetch('/api/catch/win', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ score: pct }) });
         if (resp.status === 401){ location.href = '/'; return; }
         const r = await resp.json();
-        if (resp.ok){ resultEl.textContent = `🎉 Bắt được ${score}! Nhận ${r.reward} lửa 🔥`; balEl.textContent = r.wallet.balance; confetti(); paintDone(); showCheer({delay:1000}); }
-        else { resultEl.textContent = 'Bạn đã chơi hôm nay rồi 🌙'; if(r.wallet) balEl.textContent = r.wallet.balance; paintDone(); showCheer({delay:800}); }
+        if (resp.ok){
+          resultEl.innerHTML = `🎉 Bắt trúng <b>${goodsCaught}/${goodsSpawned}</b> = <b>${pct}%</b><br>`
+            + `<span style="font-size:15px;color:#cbb8ff">Mốc ${tier} → </span><b style="color:#ffd166">${r.reward} lửa 🔥</b>`;
+          balEl.textContent = r.wallet.balance; confetti(); paintDone(); showCheer({delay:1400});
+        }
+        else { resultEl.innerHTML = `Hôm nay bạn bắt trúng <b>${pct}%</b> rồi 🌙<br><span style="font-size:15px;color:#cbb8ff">(chơi lại cho vui thôi nhé)</span>`; if(r.wallet) balEl.textContent = r.wallet.balance; paintDone(); showCheer({delay:800}); }
       } catch(e){ resultEl.textContent = 'Lỗi kết nối, thử lại nhé!'; goBtn.disabled = false; }
     }
     function paintDone(){ playedToday = true; goBtn.disabled = true; goBtn.textContent = 'Đã chơi hôm nay 🌙'; }

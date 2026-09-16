@@ -29,19 +29,21 @@
   }
   @keyframes lampFlicker{ 0%,100%{ opacity:.55; transform:scale(1) } 50%{ opacity:1; transform:scale(1.12) } }
 
-  /* QR góc phải dưới — theme Trung thu, nhỏ gọn */
-  #qrCard{ position:fixed; right:18px; bottom:18px; z-index:10; width:96px;
-           padding:7px 7px 6px; text-align:center; font-family:system-ui,sans-serif;
-           background:linear-gradient(160deg,#9a2016,#c23a22 55%,#8a1a12);
-           border:1.5px solid #ffd77a; border-radius:12px;
-           box-shadow:0 8px 22px #0008, 0 0 18px #ffcf6a44; }
-  #qrCard::before{ content:''; position:absolute; inset:3px; border:1px solid #ffd77a55; border-radius:9px; pointer-events:none; }
-  #qrCard .lt{ font-size:15px; margin-top:-16px; filter:drop-shadow(0 0 8px #ffd77a); animation:qbob 3s ease-in-out infinite; }
-  @keyframes qbob{ 0%,100%{transform:translateY(0) rotate(-5deg)} 50%{transform:translateY(-5px) rotate(5deg)} }
-  #qrCard .tt{ color:#ffe9b0; font-weight:800; font-size:8px; margin:1px 0 4px; letter-spacing:.2px; }
-  #qrCard .box{ background:#fff; border-radius:6px; padding:4px; box-shadow:inset 0 0 0 1.5px #ffd77a; }
-  #qrCard .box img{ display:block; width:100%; height:auto; image-rendering:pixelated; border-radius:2px; }
-  #qrCard .ft{ color:#ffd77a; font-size:7px; font-weight:700; margin-top:3px; }
+  /* QR góc phải dưới — khung tre cắt từ demo.jpeg, QR thật đặt đè lên ô trắng */
+  #qrCard{ position:fixed; right:48px; bottom:60px; z-index:10; width:246px;
+           text-align:center; font-family:system-ui,sans-serif;
+           filter:drop-shadow(0 12px 30px #000a) drop-shadow(0 0 30px #ff9a1a55); }
+  #qrLantern{ position:relative; width:246px; height:192px; margin:0 auto;
+    background:url('/decor/qr-frame.png') center/contain no-repeat; }
+  /* ô trắng thật của khung nằm ~ 12%..80% ngang, 8%..88% dọc -> đặt QR khít vào giữa vùng đó */
+  #qrCard .box{ position:absolute; left:17%; top:13%; width:52%; height:72%;
+    display:flex; align-items:center; justify-content:center; }
+  #qrCard .box img{ width:100%; height:100%; object-fit:contain; image-rendering:pixelated;
+    background:#fff; padding:3px; border-radius:2px; }
+  /* nhãn dưới khung */
+  #qrCard .tt{ color:#fff; font-weight:700; font-size:20px; margin-top:10px; letter-spacing:.2px;
+    text-shadow:0 2px 8px #000a; }
+  #qrCard .lt, #qrCard .ft{ display:none; }
 </style>
 </head>
 <body>
@@ -49,18 +51,13 @@
 <div id="hint">🏮 Mid-Autumn Lantern Sky</div>
 <div id="audioTip">🔊 Chạm một lần để bật âm thanh</div>
 
-<!-- Chú Cuội góc trái, lắc đầu nhẹ tươi cười -->
-<div id="cuoiWrap">
-  <div id="cuoiLampGlow"></div>
-  <img id="chuCuoi" src="/decor/chu-cuoi.png" alt="Chú Cuội">
-</div>
 
 <!-- QR góc phải dưới -->
 <div id="qrCard">
-  <div class="lt">🏮</div>
-  <div class="tt">Quét để thả đèn của bé</div>
-  <div class="box"><img id="qrImg" alt="QR"></div>
-  <div class="ft">🌕 Vui Tết Trung Thu</div>
+  <div id="qrLantern">
+    <div class="box"><img id="qrImg" alt="QR"></div>
+  </div>
+  <div class="tt">Scan để tạo lồng đèn</div>
 </div>
 <!-- Socket.IO is served by our own server at /socket.io/... — no internet needed -->
 <script src="/socket.io/socket.io.js"></script>
@@ -103,7 +100,7 @@ const CONFIG = {
   skyBottom:     '#241348',  // màu trời phía dưới
 
   // — Cảnh Trung thu (nền) —
-  showMoon:      true,    // hiện mặt trăng + chú Cuội, chị Hằng, thỏ ngọc
+  showMoon:      false,   // hiện mặt trăng + chú Cuội, chị Hằng, thỏ ngọc
   moonScale:     0.68,    // to/nhỏ mặt trăng (1.0 = mặc định)
   moonX:         0.78,    // vị trí ngang mặt trăng (0=trái, 1=phải)
   moonY:         0.28,    // vị trí dọc  (0=trên, 1=dưới)
@@ -134,6 +131,29 @@ const ctx = canvas.getContext('2d');
 let W, H;
 function resize(){ W = canvas.width = innerWidth; H = canvas.height = innerHeight; }
 resize(); addEventListener('resize', resize);
+
+// nền ảnh cover + parallax nhẹ tạo cảm giác 3D chiều sâu
+const bgImg = new Image(); let bgReady = false;
+bgImg.onload = () => { bgReady = true; };
+bgImg.src = '/decor/Background.jpeg';
+const BG_OVERSCAN = 1.14;   // phóng dư ~14% để có biên khi dịch/parallax
+let bgPx = 0, bgPy = 0;     // vị trí con trỏ đã chuẩn hoá [-1..1], làm mượt dần
+addEventListener('pointermove', e => {
+  bgPx = (e.clientX / innerWidth) * 2 - 1;
+  bgPy = (e.clientY / innerHeight) * 2 - 1;
+});
+function drawBackground(t){
+  if (!bgReady) return false;
+  const s = Math.max(W / bgImg.width, H / bgImg.height) * BG_OVERSCAN;   // cover + overscan
+  const dw = bgImg.width * s, dh = bgImg.height * s;
+  const slackX = (dw - W) / 2, slackY = (dh - H) / 2;
+  // parallax theo con trỏ + trôi chậm tự động
+  const driftX = Math.sin(t * 0.00013) * 0.35, driftY = Math.cos(t * 0.00017) * 0.35;
+  const ox = (bgPx * 0.6 + driftX) * slackX;
+  const oy = (bgPy * 0.6 + driftY) * slackY;
+  ctx.drawImage(bgImg, (W-dw)/2 - ox, (H-dh)/2 - oy, dw, dh);
+  return true;
+}
 
 const MAX = CONFIG.maxLanterns;
 const lanterns = [];
@@ -206,27 +226,62 @@ function newTrack(){
     startY: fy + Math.sin(ang)*dist,
   };
 }
-function releaseToSky(img, name, wish){
+// track cho LỚP GẦN: quanh vùng trung tâm, biên độ nhỏ -> 5 đèn gần luôn dễ thấy
+function newTrackNear(){
+  const fx = rand(W*0.22, W*0.78), fy = rand(H*0.22, H*0.72);
+  const ang = Math.random()*Math.PI*2;
+  const dist = rand(Math.min(W,H)*0.03, Math.min(W,H)*0.10);
+  return { farX: fx, farY: fy, startX: fx + Math.cos(ang)*dist, startY: fy + Math.sin(ang)*dist };
+}
+const NEAR_MAX = 5;                    // số đèn tối đa ở lớp gần
+const Z_NEAR_HI = 0.32, Z_NEAR_LO = -0.05;   // dải z lớp gần
+// gán lớp cho 1 đèn: layer 1 (gần, rõ) | 2 (xa, mờ nhẹ)
+function assignLayer(l, layer){
+  l.layer = layer;
+  if (layer === 1){
+    Object.assign(l, newTrackNear());
+    l.zSpeed = rand(0.00035, 0.00060);         // chậm hơn -> ở gần lâu
+    if (l.z == null || l.z > Z_NEAR_HI) l.z = rand(0.06, Z_NEAR_HI);
+  } else {
+    Object.assign(l, newTrack());
+    l.zSpeed = rand(0.00055, 0.00090);
+  }
+}
+// giữ đúng <=5 đèn mới nhất ở lớp gần; dư -> hạ đèn cũ nhất xuống lớp xa
+function promoteNewest(){
+  const near = lanterns.filter(x=>!x.leaving && x.layer===1).sort((a,b)=>a.born-b.born);
+  while (near.length > NEAR_MAX){
+    const old = near.shift();
+    assignLayer(old, 2);
+    old.z = rand(0.4, 0.8);                    // hạ ra xa
+  }
+}
+function releaseToSky(img, name, wish, layer){
   const big = (Math.min(W,H)*0.20 / Math.max(img.width,img.height)) * rand(CONFIG.sizeMin, CONFIG.sizeMax);
-  lanterns.push({
+  const l = {
     img, name: name || '', wish: wish || '',
     ...newTrack(),
-    z: 0.08,                           // a freshly-released one starts up front
-    zSpeed: rand(0.00055, 0.00090),    // SLOW drift toward the viewer (per frame)
+    z: 0.08,
+    zSpeed: rand(0.00055, 0.00090),
     phase: Math.random()*Math.PI*2,
     drift: 0.4 + Math.random()*0.5,
     amp: rand(CONFIG.wobbleMin, CONFIG.wobbleMax),
     bigScale: big,
     spot: 0,
-    flick: Math.random()*Math.PI*2,    // candle flicker phase
+    flick: Math.random()*Math.PI*2,
     fade: 1,
-    born: performance.now()
-  });
+    born: performance.now(),
+    layer: 1,
+  };
+  lanterns.push(l);
+  assignLayer(l, layer || 1);          // đèn mới mặc định vào lớp gần
+  promoteNewest();
   const alive = lanterns.filter(x=>!x.leaving);
   if (alive.length > MAX){
     alive.sort((a,b)=>a.born-b.born);
     alive[0].leaving = true;           // oldest starts fading out
   }
+  return l;
 }
 
 // add an OLD lantern straight into the sky (no ceremony) — used on page load.
@@ -249,12 +304,14 @@ const ENTRANCE_MS = 4000;
 
 function enqueueEntrance(rec){
   const img = new Image();
-  img.onload = () => entranceQ.push({ img, name: rec.name || '', wish: rec.wish || '' });
+  img.onload = () => entranceQ.push({ img, id: rec.id, name: rec.name || '', wish: rec.wish || '' });
   img.src = '/lanterns/' + rec.file;
 }
 function pumpEntrance(t){
   if (!entrance && entranceQ.length){
     entrance = entranceQ.shift(); entrance.t0 = t;
+    // đèn thực sự vào khung nhìn -> báo server đã xuất hiện (ảnh đã tải, đang hiển thị)
+    if (entrance.id != null) socket.emit('lantern-shown', { id: entrance.id });
     if (CONFIG.confetti) burstConfetti(W*0.5, H*0.46);   // pop on arrival
     if (CONFIG.sound)    playTing();
   }
@@ -379,14 +436,21 @@ function drawEntrance(t){
 
 // load whatever already exists (so restarting the screen doesn't lose the wall).
 // stagger their depth EVENLY across the flight so they don't stack on one layer.
+// /api/recent trả newest-last -> 5 phần tử CUỐI = mới nhất -> lớp gần, còn lại -> lớp xa
 fetch('/api/recent').then(r=>r.json()).then(list => {
+  const n = list.length;
   list.forEach((rec, i) => {
+    const isNear = i >= n - NEAR_MAX;                 // 5 cuối = mới nhất
     const img = new Image();
     img.onload = () => {
-      releaseToSky(img, rec.name, rec.wish);
-      const last = lanterns[lanterns.length-1];
-      last.z = (i + 0.5) / Math.max(1, list.length);   // spread 0..1 evenly
-      last.phase = Math.random()*Math.PI*2;
+      const l = releaseToSky(img, rec.name, rec.wish, isNear ? 1 : 2);
+      if (!isNear){
+        l.z = 0.4 + Math.random()*0.55;               // lớp xa: rải sâu 0.4..0.95
+      } else {
+        l.z = rand(0.08, Z_NEAR_HI);                  // lớp gần
+      }
+      l.phase = Math.random()*Math.PI*2;
+      promoteNewest();
     };
     img.src = '/lanterns/' + rec.file;
   });
@@ -611,10 +675,17 @@ function drawMoon(t){
 
 function frame(t){
   ctx.clearRect(0,0,W,H);
-  // soft night-sky gradient
-  const g = ctx.createLinearGradient(0,0,0,H);
-  g.addColorStop(0,CONFIG.skyTop); g.addColorStop(1,CONFIG.skyBottom);
-  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  // nền: ảnh cover + parallax 3D nếu tải xong, chưa thì gradient trời
+  if (drawBackground(t)){
+    // vignette tối viền -> tăng chiều sâu, nền lún vào trong
+    const vg = ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*0.3, W/2,H/2,Math.max(W,H)*0.7);
+    vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(4,2,16,0.55)');
+    ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
+  } else {
+    const g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,CONFIG.skyTop); g.addColorStop(1,CONFIG.skyBottom);
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  }
 
   if (CONFIG.showStars)     drawStars(t);
   if (CONFIG.shootingStars) maybeShoot(t);
@@ -631,10 +702,18 @@ function frame(t){
 
     // drift OUT toward the viewer: z decreases (spotlighted one nearly pauses)
     if (!isSpot) l.z -= l.zSpeed * (1 - l.spot*0.96);
-    // once it has drifted past the viewer, loop back to the moon on a fresh track
-    if (l.z <= -0.28){
-      if (l.leaving){ l._dead = true; }
-      else { l.z = 1; Object.assign(l, newTrack()); l.phase = Math.random()*Math.PI*2; }
+    if (l.layer === 1){
+      // LỚP GẦN: quẩn trong dải gần, không lùi về mặt trăng
+      if (l.z <= Z_NEAR_LO){
+        if (l.leaving){ l._dead = true; }
+        else { l.z = Z_NEAR_HI; Object.assign(l, newTrackNear()); l.phase = Math.random()*Math.PI*2; }
+      }
+    } else {
+      // LỚP XA: bay từ mặt trăng ra rồi loop lại
+      if (l.z <= -0.28){
+        if (l.leaving){ l._dead = true; }
+        else { l.z = 1; Object.assign(l, newTrack()); l.phase = Math.random()*Math.PI*2; }
+      }
     }
     l.phase += 0.02*l.drift;
 
@@ -646,12 +725,18 @@ function frame(t){
     const cx = fx + (l.startX - fx)*t01 + Math.sin(l.phase)*l.amp*pp*(1-l.spot);
     const cy = fy + (l.startY - fy)*t01 + Math.cos(l.phase*0.8)*l.amp*0.5*pp*(1-l.spot);
 
-    // alpha: fade in just after leaving the moon, fade out as it passes the viewer
-    const appear = Math.min(1, (1 - l.z)/0.12);        // 0 at moon → 1 shortly after
-    const vanish = Math.min(1, Math.max(0, (l.z + 0.28)/0.30));  // 1 until z<0 → 0 at -0.28
-    // distant lanterns dimmer than near ones → clearer depth layering, less clutter
-    const depthDim = 0.35 + 0.65*pp;
-    const alpha = Math.max(0, Math.min(1, appear * vanish * depthDim * l.fade));
+    // alpha khác nhau theo lớp
+    let alpha;
+    if (l.layer === 1){
+      // LỚP GẦN: sáng rõ hẳn, không làm mờ theo chiều sâu; chỉ fade nhẹ ở 2 mép dải gần
+      const vanishN = Math.min(1, Math.max(0, (l.z - Z_NEAR_LO)/0.10));   // mờ dần khi sắp qua viewer
+      alpha = Math.max(0, Math.min(1, vanishN * l.fade));
+    } else {
+      const appear = Math.min(1, (1 - l.z)/0.12);        // 0 at moon → 1 shortly after
+      const vanish = Math.min(1, Math.max(0, (l.z + 0.28)/0.30));  // 1 until z<0 → 0 at -0.28
+      const depthDim = 0.35 + 0.65*pp;                    // đèn xa mờ hơn
+      alpha = Math.max(0, Math.min(1, appear * vanish * depthDim * l.fade));
+    }
 
     const zoom = 1 + l.spot*(CONFIG.spotZoom-1);
     const scale = l.bigScale * pp * zoom;
@@ -663,17 +748,18 @@ function frame(t){
     ctx.globalAlpha = alpha;
     ctx.translate(cx, cy);
     ctx.rotate(Math.sin(l.phase)*0.05*(1-l.spot));
+    const nearBoost = (l.layer === 1) ? 1.7 : 1;      // lớp gần: quầng sáng mạnh hơn
     if (CONFIG.candleFlicker && ih > 8){
       l.flick += 0.15 + Math.random()*0.1;
       const fl = 0.6 + 0.4*Math.sin(l.flick) + (Math.random()-0.5)*0.15;
       ctx.save(); ctx.globalCompositeOperation='lighter';
       const gl = ctx.createRadialGradient(0,0,0, 0,0,ih*0.6);
-      gl.addColorStop(0, `rgba(255,190,90,${(0.35+l.spot*0.4)*fl*alpha})`);
+      gl.addColorStop(0, `rgba(255,190,90,${Math.min(1,(0.35+l.spot*0.4)*fl*alpha*nearBoost)})`);
       gl.addColorStop(1, 'rgba(255,190,90,0)');
       ctx.fillStyle=gl; ctx.beginPath(); ctx.arc(0,0,ih*0.6,0,Math.PI*2); ctx.fill();
       ctx.restore();
     }
-    ctx.shadowColor = CONFIG.glowColor; ctx.shadowBlur = (CONFIG.glowSize + l.spot*30)*pp;
+    ctx.shadowColor = CONFIG.glowColor; ctx.shadowBlur = (CONFIG.glowSize + l.spot*30)*pp*nearBoost;
     ctx.drawImage(l.img, -iw/2, -ih/2, iw, ih);
     ctx.restore();
 

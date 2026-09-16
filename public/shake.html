@@ -8,7 +8,7 @@
   :root{ --gold:#ffd77a; --gold2:#ffe9b0; --deep:#0a0620; --rim:#b5340c; }
   *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-user-select:none; user-select:none; }
   body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-    color:#fff; background:radial-gradient(130% 100% at 50% -10%, #2a1a5e 0%, var(--deep) 58%, #05030f 100%);
+    color:#fff; background:#0d0a26 url('/decor/Background.jpeg') center top / cover no-repeat fixed;
     min-height:100vh; overflow-x:hidden; text-align:center; display:flex; flex-direction:column; align-items:center; }
   body::after{ content:''; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.5;
     background-image:radial-gradient(1.5px 1.5px at 20% 30%, #fff, transparent), radial-gradient(1.5px 1.5px at 70% 20%, #fff, transparent), radial-gradient(1px 1px at 40% 60%, #fff, transparent), radial-gradient(1.5px 1.5px at 85% 55%, #fff, transparent);
@@ -39,13 +39,33 @@
   @keyframes pop{ 0%{ transform:scale(.6); opacity:0 } 60%{ transform:scale(1.15) } 100%{ transform:scale(1); opacity:1 } }
   .confetti{ position:fixed; top:-10px; font-size:22px; z-index:60; pointer-events:none; animation:fall linear forwards; }
   @keyframes fall{ to{ transform:translateY(110vh) rotate(360deg); opacity:0; } }
+
+  /* live intensity label above the lantern */
+  .intensity{ position:relative; z-index:2; min-height:24px; font-size:19px; font-weight:900; letter-spacing:.5px;
+    text-transform:uppercase; opacity:0; transition:opacity .2s, color .2s, transform .1s; }
+  .intensity.show{ opacity:1; }
+  /* particles flung from the lantern on each strong shake */
+  .spark{ position:fixed; z-index:55; pointer-events:none; font-size:26px; will-change:transform,opacity;
+    animation:fly .8s ease-out forwards; }
+  @keyframes fly{ to{ transform:translate(var(--dx),var(--dy)) rotate(var(--rot)) scale(.4); opacity:0; } }
+  /* frenzy: the whole page catches fire */
+  body.frenzy{ background:#0d0a26 url('/decor/Background.jpeg') center top / cover no-repeat fixed; }
+  body.frenzy .lantern{ filter:drop-shadow(0 0 55px #ff5722) drop-shadow(0 0 22px #ffd166); }
+  .frenzyBadge{ position:fixed; top:50%; left:50%; transform:translate(-50%,-50%) scale(.5); z-index:58;
+    font-size:44px; font-weight:900; color:#fff; text-shadow:0 0 20px #ff5722,0 0 40px #ff8c1a; opacity:0; pointer-events:none; }
+  .frenzyBadge.show{ animation:frenzyPop .7s ease; }
+  @keyframes frenzyPop{ 0%{opacity:0;transform:translate(-50%,-50%) scale(.4) rotate(-8deg)} 40%{opacity:1;transform:translate(-50%,-50%) scale(1.1) rotate(3deg)} 100%{opacity:0;transform:translate(-50%,-50%) scale(1.4)} }
+  /* lu1edbp phu1ee7 tu1889 nhu1eb9 tru00ean nu1ec1n demo -> chu1eef du1ec5 u0111u1ecdc */
+  body::before{ content:''; position:fixed; inset:0; z-index:0; pointer-events:none;
+    background:linear-gradient(180deg, #0a081e33 0%, #0a081e66 55%, #0a081eaa 100%); }
 </style>
 </head>
 <body>
   <h1>🏮 Lắc Đi Cho Hết Căng</h1>
-  <div class="sub" id="sub">Lắc điện thoại thật mạnh trong 5 giây — lắc càng mạnh, càng nhiều lửa! 🔥</div>
+  <div class="sub" id="sub">Lắc thật mạnh trong 5 giây! Lắc mạnh liên tục để vào <b style="color:#ff8c1a">CỰC PHÊ 🔥x2</b>. ≥80% = 4🔥, 50-79% = 3🔥, &lt;50% = 2🔥</div>
   <div class="bal" id="bal">🔥 …</div>
 
+  <div class="intensity" id="intensity"></div>
   <div class="lantern" id="lantern">🏮</div>
   <div class="timer" id="timer"></div>
   <div class="meter"><i id="meterFill"></i></div>
@@ -65,11 +85,52 @@
     const meterFill = document.getElementById('meterFill');
     const lantern = document.getElementById('lantern');
     const subEl = document.getElementById('sub');
+    const intensityEl = document.getElementById('intensity');
 
     const DURATION = 5000;      // shake window (ms)
     let playedToday = false, busy = false;
     let shakeAccum = 0, lastAcc = null, running = false;
     let noMotion = false;       // desktop / no sensor -> fall back to tapping
+    let recent = 0;             // rolling shake intensity (decays) -> drives frenzy
+    let frenzy = false;         // CỰC PHÊ mode: strong sustained shaking -> x2
+    let sparkBudget = 0;        // rate-limit particle spawns
+
+    const SPARKS = ['🔥','🥮','✨','🏮','🌟'];
+    function fling(){
+      if (sparkBudget <= 0) return; sparkBudget--;
+      const s = document.createElement('div'); s.className = 'spark';
+      s.textContent = frenzy ? '🔥' : SPARKS[Math.floor(Math.random()*SPARKS.length)];
+      const r = lantern.getBoundingClientRect();
+      s.style.left = (r.left + r.width/2 - 13) + 'px';
+      s.style.top  = (r.top + r.height/2 - 13) + 'px';
+      const ang = Math.random()*Math.PI*2, dist = 90 + Math.random()*140;
+      s.style.setProperty('--dx', Math.cos(ang)*dist + 'px');
+      s.style.setProperty('--dy', (Math.sin(ang)*dist - 40) + 'px');
+      s.style.setProperty('--rot', (Math.random()*540-270) + 'deg');
+      document.body.appendChild(s); setTimeout(()=>s.remove(), 800);
+    }
+    function setIntensity(){
+      // recent decays each frame; label + color reflect how hard they're going now
+      let label, color;
+      if (recent > 120){ label = '🔥 CỰC PHÊ!'; color = '#ff5722'; }
+      else if (recent > 70){ label = 'Bùng cháy!'; color = '#ff8c1a'; }
+      else if (recent > 35){ label = 'Nóng lên!'; color = '#ffd166'; }
+      else if (recent > 10){ label = 'Ấm rồi…'; color = '#ffe9b0'; }
+      else { label = ''; }
+      intensityEl.textContent = label;
+      intensityEl.classList.toggle('show', !!label);
+      if (label) intensityEl.style.color = color;
+      // frenzy toggles on sustained hard shaking
+      const nowFrenzy = recent > 120;
+      if (nowFrenzy && !frenzy){ frenzy = true; document.body.classList.add('frenzy'); showFrenzyBadge(); buzz(30); }
+      else if (!nowFrenzy && frenzy && recent < 80){ frenzy = false; document.body.classList.remove('frenzy'); }
+    }
+    let badgeEl = null;
+    function showFrenzyBadge(){
+      if (!badgeEl){ badgeEl = document.createElement('div'); badgeEl.className='frenzyBadge'; badgeEl.textContent='🔥 CỰC PHÊ x2 🔥'; document.body.appendChild(badgeEl); }
+      badgeEl.classList.remove('show'); void badgeEl.offsetWidth; badgeEl.classList.add('show');
+    }
+    function buzz(ms){ if (navigator.vibrate) { try { navigator.vibrate(ms); } catch(e){} } }
 
     async function loadWallet(){
       const r = await (await fetch('/api/wallet')).json();
@@ -83,18 +144,26 @@
         if(!resultEl.textContent) resultEl.textContent = 'Mai quay lại lắc tiếp nhé!'; }
     }
 
+    function registerShake(d){
+      // frenzy doubles what lands in the score bar; recent tracks live intensity
+      shakeAccum += frenzy ? d*2 : d;
+      recent += d;
+      const scale = frenzy ? 1.14 : 1.06;
+      lantern.style.transform = `rotate(${(Math.random()*36-18)}deg) scale(${scale})`;
+      if (d > 10){ fling(); buzz(frenzy ? 22 : 12); }
+    }
     function onMotion(e){
       if (!running) return;
       const a = e.accelerationIncludingGravity || e.acceleration;
       if (!a) return;
       if (lastAcc){
         const d = Math.abs(a.x-lastAcc.x) + Math.abs(a.y-lastAcc.y) + Math.abs(a.z-lastAcc.z);
-        if (d > 4){ shakeAccum += d; lantern.style.transform = `rotate(${(Math.random()*30-15)}deg) scale(1.06)`; }
+        if (d > 4){ registerShake(d); }
       }
       lastAcc = { x:a.x||0, y:a.y||0, z:a.z||0 };
     }
     // desktop fallback: rapid tapping on the lantern counts as "shaking"
-    lantern.addEventListener('click', ()=>{ if(running && noMotion){ shakeAccum += 18; lantern.style.transform = `scale(1.12)`; setTimeout(()=>lantern.style.transform='',80);} });
+    lantern.addEventListener('click', ()=>{ if(running && noMotion){ registerShake(18); setTimeout(()=>lantern.style.transform='',80);} });
 
     async function start(){
       if (busy || playedToday) return;
@@ -109,27 +178,38 @@
       window.addEventListener('devicemotion', onMotion);
 
       busy = true; running = true; shakeAccum = 0; lastAcc = null;
+      recent = 0; frenzy = false; document.body.classList.remove('frenzy');
       goBtn.disabled = true; resultEl.textContent = '';
       let left = Math.ceil(DURATION/1000);
       timerEl.textContent = left;
       const iv = setInterval(()=>{ left--; timerEl.textContent = left>0?left:'⏰'; }, 1000);
-      // live meter based on accumulated shake (cap for display)
-      const mv = setInterval(()=>{ meterFill.style.width = Math.min(100, shakeAccum/12) + '%'; }, 100);
+      // ~60fps loop: decay recent intensity, refill spark budget, update meter + label
+      const mv = setInterval(()=>{
+        recent *= 0.82;                       // decay so you must keep shaking hard
+        sparkBudget = Math.min(4, sparkBudget + 1);
+        setIntensity();
+        meterFill.style.width = Math.min(100, shakeAccum/12) + '%';
+      }, 60);
 
       setTimeout(async ()=>{
         clearInterval(iv); clearInterval(mv); running = false;
         window.removeEventListener('devicemotion', onMotion);
-        lantern.style.transform = '';
+        lantern.style.transform = ''; frenzy = false; document.body.classList.remove('frenzy');
+        intensityEl.classList.remove('show');
         // map accumulated shake to a 0..100 score. ~1200 units in 5s = full bar.
         const score = Math.max(0, Math.min(100, Math.round(shakeAccum/12)));
+        const tier = score >= 80 ? '≥80%' : score >= 50 ? '50–79%' : '<50%';
         meterFill.style.width = score + '%';
         timerEl.textContent = '';
         try {
           const resp = await fetch('/api/shake/win', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ score }) });
           if (resp.status === 401){ location.href = '/'; return; }
           const r = await resp.json();
-          if (resp.ok){ resultEl.textContent = `💪 Điểm ${score}! Bạn nhận được ${r.reward} lửa 🔥`; resultEl.classList.add('win'); confetti(); paint(r.wallet); showCheer({delay:1000}); }
-          else { if(r.wallet) paint(r.wallet); resultEl.textContent = 'Bạn đã chơi hôm nay rồi 🌙'; showCheer({delay:800}); }
+          if (resp.ok){
+            resultEl.innerHTML = `💪 Sức lắc <b>${score}%</b><br><span style="font-size:15px;color:#cbb8ff">Mốc ${tier} → </span><b style="color:#ffd166">${r.reward} lửa 🔥</b>`;
+            resultEl.classList.add('win'); confetti(); buzz([40,30,80]); paint(r.wallet); showCheer({delay:1400});
+          }
+          else { if(r.wallet) paint(r.wallet); resultEl.innerHTML = `Hôm nay bạn lắc được <b>${score}%</b> rồi 🌙<br><span style="font-size:15px;color:#cbb8ff">(chơi lại cho vui thôi nhé)</span>`; showCheer({delay:800}); }
         } catch(e){ resultEl.textContent = 'Lỗi kết nối, thử lại nhé!'; goBtn.disabled = false; }
         busy = false;
       }, DURATION);

@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quản trị · Lồng đèn Trung Thu</title>
+<style>
+  :root{ --gold:#ffd77a; --gold2:#ffe9b0; }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; min-height:100%; }
+  body{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; color:#fff;
+    background:#0d0a26 url('/decor/Background.jpeg') center top / cover no-repeat fixed;
+    min-height:100vh; }
+  body::before{ content:''; position:fixed; inset:0; z-index:0; pointer-events:none;
+    background:linear-gradient(180deg,#0a081e55 0%,#0a081eaa 60%,#0a081ee6 100%); }
+  .wrap{ position:relative; z-index:1; max-width:1000px; margin:0 auto; padding:22px 16px 40px; }
+  h1{ font-size:22px; font-weight:900; margin:6px 0 16px;
+     background:linear-gradient(90deg,#ffe9b0,#ffd166,#ff8c1a);
+     -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+
+  /* login */
+  #lock{ max-width:340px; margin:16vh auto 0; text-align:center; position:relative; z-index:1; }
+  #lock .card{ background:rgba(20,14,40,.6); backdrop-filter:blur(10px);
+    border:1.5px solid #ffffff26; border-radius:18px; padding:26px 22px; }
+  #lock h1{ text-align:center; }
+  #lock input{ width:100%; padding:15px; font-size:16px; text-align:center; color:#fff;
+    border:1.5px solid #ffffff26; border-radius:14px; background:rgba(10,8,26,.6); outline:none; }
+  #lock input:focus{ border-color:var(--gold); }
+  .btnW{ width:100%; margin-top:14px; padding:15px; font-size:16px; font-weight:800; border:0;
+    border-radius:14px; background:#fff; color:#1a1030; }
+  .btnW:active{ transform:scale(.98); }
+  #lockErr{ color:#ff9a9a; font-size:13px; min-height:18px; margin-top:10px; }
+
+  /* toolbar */
+  .bar{ display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    background:rgba(20,14,40,.55); backdrop-filter:blur(10px);
+    border:1.5px solid #ffffff1f; border-radius:16px; padding:12px 16px; margin-bottom:16px; }
+  .bar .grow{ flex:1; min-width:120px; }
+  .toggle{ display:inline-flex; align-items:center; gap:10px; font-weight:800; }
+  .sw{ width:52px; height:30px; border-radius:999px; background:#5a4a7a; position:relative;
+    transition:background .2s; cursor:pointer; flex:0 0 auto; }
+  .sw.on{ background:#3ec46d; }
+  .sw i{ position:absolute; top:3px; left:3px; width:24px; height:24px; border-radius:50%;
+    background:#fff; transition:left .2s; }
+  .sw.on i{ left:25px; }
+  .ghost{ background:#ffffff14; color:var(--gold2); border:1px solid #ffffff33;
+    border-radius:10px; padding:9px 14px; font-weight:800; font-size:14px; cursor:pointer; }
+  .ghost:active{ transform:scale(.96); }
+
+  /* grid */
+  #grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:14px; }
+  .card{ background:rgba(20,14,40,.55); backdrop-filter:blur(8px);
+    border:1.5px solid #ffffff1f; border-radius:16px; overflow:hidden; display:flex; flex-direction:column; }
+  .card.hidden{ opacity:.5; border-color:#ff9a9a55; }
+  .thumb{ width:100%; aspect-ratio:1/1; object-fit:contain; background:#0a0620; display:block; }
+  .meta{ padding:8px 10px 10px; flex:1; display:flex; flex-direction:column; gap:4px; }
+  .nm{ font-weight:800; font-size:14px; color:var(--gold2); }
+  .wsh{ font-size:12px; color:#c9b8ff; line-height:1.35; word-break:break-word; }
+  .st{ font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; align-self:flex-start; }
+  .st.approved{ background:#173d27; color:#8ef0b0; }
+  .st.pending,.st.processing{ background:#3a3218; color:#ffd77a; }
+  .st.rejected{ background:#3d1717; color:#ff9a9a; }
+  .act{ border:0; padding:10px; font-weight:800; font-size:14px; cursor:pointer; color:#1a1030; }
+  .act.hide{ background:#ffb4b4; }
+  .act.show{ background:#9ef0bd; }
+  .empty{ text-align:center; color:#c9b8ff; padding:40px 0; }
+  .count{ color:#c9b8ff; font-size:13px; }
+</style>
+</head>
+<body>
+
+<!-- LOCK SCREEN -->
+<div id="lock">
+  <div class="card">
+    <h1>🔒 Quản trị</h1>
+    <p style="color:#c9b8ff;font-size:14px;margin:0 0 16px;">Nhập mật khẩu để quản lý lồng đèn.</p>
+    <input id="key" type="password" placeholder="Mật khẩu quản trị" autocomplete="current-password">
+    <button class="btnW" id="loginBtn">Đăng nhập</button>
+    <div id="lockErr"></div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div class="wrap" id="dash" style="display:none;">
+  <h1>🏮 Quản trị lồng đèn</h1>
+  <div class="bar">
+    <div class="toggle">
+      <span>Nhận lồng đèn mới</span>
+      <div class="sw" id="accSw"><i></i></div>
+      <span id="accTxt" class="count"></span>
+    </div>
+    <div class="grow"></div>
+    <span class="count" id="cnt"></span>
+    <button class="ghost" id="refreshBtn">↻ Tải lại</button>
+    <button class="ghost" id="logoutBtn">Đăng xuất</button>
+  </div>
+  <div id="grid"></div>
+  <div class="empty" id="empty" style="display:none;">Chưa có lồng đèn nào.</div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const lock = $('#lock'), dash = $('#dash');
+
+async function api(path, body){
+  const opt = { method: body ? 'POST' : 'GET', headers:{'Content-Type':'application/json'} };
+  if (body) opt.body = JSON.stringify(body);
+  const r = await fetch(path, opt);
+  return { ok:r.ok, status:r.status, data: await r.json().catch(()=>({})) };
+}
+
+async function login(){
+  const key = $('#key').value.trim();
+  $('#lockErr').textContent = '';
+  const r = await api('/api/admin/login', { key });
+  if (!r.ok){ $('#lockErr').textContent = 'Mật khẩu không đúng.'; return; }
+  enter();
+}
+
+async function enter(){
+  const r = await api('/api/admin/lanterns');
+  if (!r.ok){ lock.style.display='block'; dash.style.display='none'; return; }
+  lock.style.display='none'; dash.style.display='block';
+  render(r.data);
+  connectSocket();
+}
+
+let accepting = true;
+function setAcc(on){
+  accepting = on;
+  $('#accSw').classList.toggle('on', on);
+  $('#accTxt').textContent = on ? 'ĐANG BẬT' : 'ĐANG TẮT';
+}
+
+function render(data){
+  setAcc(!!data.accepting);
+  const list = data.lanterns || [];
+  $('#cnt').textContent = list.length + ' lồng đèn';
+  const grid = $('#grid'); grid.innerHTML = '';
+  $('#empty').style.display = list.length ? 'none' : 'block';
+  for (const l of list){
+    const img = l.ai_file || l.file;
+    const hidden = l.status === 'rejected';
+    const el = document.createElement('div');
+    el.className = 'card' + (hidden ? ' hidden' : '');
+    el.innerHTML =
+      `<img class="thumb" src="/lanterns/${img}" alt="">`
+      + `<div class="meta">`
+      +   `<span class="st ${l.status}">${l.status}</span>`
+      +   `<span class="nm">${esc(l.name||'(không tên)')}</span>`
+      +   (l.wish ? `<span class="wsh">${esc(l.wish)}</span>` : '')
+      + `</div>`
+      + (hidden
+          ? `<button class="act show" data-show="${l.id}">Hiện lại</button>`
+          : `<button class="act hide" data-hide="${l.id}">Ẩn khỏi màn hình</button>`);
+    grid.appendChild(el);
+  }
+}
+function esc(s){ return (s||'').toString().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+async function reload(){ const r = await api('/api/admin/lanterns'); if (r.ok) render(r.data); }
+
+// event delegation for hide/show
+$('#grid').addEventListener('click', async e => {
+  const hide = e.target.getAttribute('data-hide');
+  const show = e.target.getAttribute('data-show');
+  if (hide){ e.target.disabled = true; await api('/api/admin/hide', { id:+hide }); reload(); }
+  if (show){ e.target.disabled = true; await api('/api/admin/show', { id:+show }); reload(); }
+});
+$('#accSw').addEventListener('click', async () => {
+  const r = await api('/api/admin/accepting', { on: !accepting });
+  if (r.ok) setAcc(r.data.accepting);
+});
+$('#refreshBtn').addEventListener('click', reload);
+$('#logoutBtn').addEventListener('click', async () => {
+  await api('/api/admin/logout', {}); location.reload();
+});
+$('#loginBtn').addEventListener('click', login);
+$('#key').addEventListener('keydown', e => { if (e.key==='Enter') login(); });
+
+let socket = null;
+function connectSocket(){
+  if (socket) return;
+  socket = io();
+  socket.on('pending-changed', reload);
+  socket.on('new-lantern', reload);
+}
+
+// try to enter directly (cookie may already be valid)
+enter();
+</script>
+</body>
+</html>

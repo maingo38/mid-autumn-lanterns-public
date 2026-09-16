@@ -120,6 +120,25 @@ try { db.exec('ALTER TABLE lanterns ADD COLUMN device_id TEXT'); } catch (e) {}
 // one lantern per Google account: the account's `sub`. Old rows stay NULL
 // (unmapped) — they keep showing on the screen/rank but belong to no account.
 try { db.exec('ALTER TABLE lanterns ADD COLUMN user_sub TEXT'); } catch (e) {}
+// bước 5 "độ cao": đèn đã xuất hiện trên /screen chưa + tổng độ cao mô phỏng (m)
+try { db.exec('ALTER TABLE lanterns ADD COLUMN appeared INTEGER NOT NULL DEFAULT 0'); } catch (e) {}
+try { db.exec('ALTER TABLE lanterns ADD COLUMN appeared_at INTEGER'); } catch (e) {}
+try { db.exec('ALTER TABLE lanterns ADD COLUMN height INTEGER NOT NULL DEFAULT 0'); } catch (e) {}
+
+// game "tạo gió" tăng độ cao — mỗi lượt 10s, chốt điểm server-side.
+// request_id: client sinh, UNIQUE -> start lại cùng id không tạo lượt mới (idempotent).
+db.exec(`CREATE TABLE IF NOT EXISTS height_plays (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_sub   TEXT NOT NULL,
+  lantern_id INTEGER NOT NULL,
+  day        TEXT NOT NULL,
+  request_id TEXT NOT NULL UNIQUE,
+  started_at INTEGER NOT NULL,
+  ends_at    INTEGER NOT NULL,
+  finalized  INTEGER NOT NULL DEFAULT 0,
+  meters     INTEGER NOT NULL DEFAULT 0,
+  created    INTEGER NOT NULL
+)`);
 
 // Google accounts that have signed in.
 db.exec(`CREATE TABLE IF NOT EXISTS users (
@@ -177,12 +196,33 @@ db.exec(`CREATE TABLE IF NOT EXISTS games (
   UNIQUE(voter, day, game)
 )`);
 
+// ── Voting (separate currency from fire) ──────────────────────────
+// A "vote" is NOT fire. Each voter earns +1 vote per distinct day they show up
+// (one checkins row per voter/day). Votes accumulate over the event and are
+// spent on lanterns — 1 or many, split however the voter likes (no per-lantern
+// cap), but never on their own lantern. voteBalance = daysCheckedIn - votesCast.
+db.exec(`CREATE TABLE IF NOT EXISTS checkins (
+  voter    TEXT NOT NULL,
+  day      TEXT NOT NULL,
+  created  INTEGER NOT NULL,
+  UNIQUE(voter, day)
+)`);
+// no UNIQUE here: a voter may pile several votes on the same lantern.
+db.exec(`CREATE TABLE IF NOT EXISTS votes (
+  lantern  INTEGER NOT NULL,
+  voter    TEXT NOT NULL,
+  day      TEXT NOT NULL,
+  created  INTEGER NOT NULL
+)`);
+
 // testing switch: SPIN_UNLIMITED=1 lets everyone spin as many times as they want
 // (fires still accumulate in the wallet). Default off = one spin per person/day.
 const SPIN_UNLIMITED = process.env.SPIN_UNLIMITED === '1';
-// GAMES_UNLIMITED=1 lifts the once-per-day cap on ALL games (for testing).
+// GAMES_UNLIMITED lifts the once-per-day cap on ALL games (for testing).
 // Implemented by tagging the day key with a timestamp so UNIQUE never collides.
-const GAMES_UNLIMITED = process.env.GAMES_UNLIMITED === '1';
+// `let` (not const): the /api/testing toggle flips it at runtime. Env sets the
+// initial value; the toggle overrides it until the server restarts.
+let GAMES_UNLIMITED = process.env.GAMES_UNLIMITED === '1';
 // the day-key a game row is stored under; unlimited => unique each play
 function gameDay(day){ return GAMES_UNLIMITED ? day + '#' + Date.now() + Math.random().toString(36).slice(2,6) : day; }
 
@@ -190,6 +230,24 @@ function gameDay(day){ return GAMES_UNLIMITED ? day + '#' + Date.now() + Math.ra
 function today() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+// ── Game "tạo gió" tăng độ cao (bước 5) ────────────────────────────
+// Cấu hình dễ chỉnh: 3 lượt/ngày, mỗi lượt 10s, +10m mỗi tương tác hợp lệ,
+// tối đa 3 tương tác/giây -> trần điểm mỗi lượt = 10s * 3 * 10m = 300m.
+const HEIGHT_CFG = {
+  playsPerDay: Number(process.env.HEIGHT_PLAYS || 3),
+  durationMs:  Number(process.env.HEIGHT_DURATION_MS || 10000),
+  metersPerHit: Number(process.env.HEIGHT_METERS || 10),
+  maxHitsPerSec: Number(process.env.HEIGHT_MAX_HPS || 3),
+};
+HEIGHT_CFG.maxHits = Math.ceil(HEIGHT_CFG.durationMs / 1000) * HEIGHT_CFG.maxHitsPerSec;
+HEIGHT_CFG.maxMeters = HEIGHT_CFG.maxHits * HEIGHT_CFG.metersPerHit;
+
+// ngày theo giờ Việt Nam (Asia/Ho_Chi_Minh) cho reset lượt độ cao
+function todayVN() {
+  const s = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year:'numeric', month:'2-digit', day:'2-digit' });
+  return s.slice(0, 10);   // 'YYYY-MM-DD'
 }
 
 // the wheel face: 6 segments worth 1–4 fires. Laid out so equal values sit
@@ -238,15 +296,49 @@ function wallet(voter, day) {
   const fired  = db.prepare('SELECT lantern FROM fires WHERE voter=? AND day=?').all(voter, day).map(r => r.lantern);
   const earnedToday = db.prepare('SELECT COALESCE(SUM(reward),0) AS n FROM spins WHERE voter=? AND day=?').get(voter, day).n;
   const U = GAMES_UNLIMITED;
+  // when testing is OFF, a voter may play only ONE mini game per day total
+  // (spin/wheel is separate). Playing any of the 5 locks all five.
+  const playedAnyGame = puzzled || played.shake || played.quiz || played.fortune || played.catch;
+  const gameOpen = U || !playedAnyGame;
+  // votes: +1 per distinct check-in day, spent on others' lanterns (accumulates)
+  const voteEarned = db.prepare('SELECT COUNT(*) AS n FROM checkins WHERE voter=?').get(voter).n;
+  const voteSpent  = db.prepare('SELECT COUNT(*) AS n FROM votes WHERE voter=?').get(voter).n;
   return { balance: earned - spent, earned, spent, earnedToday,
-           canSpin: SPIN_UNLIMITED || U || !spun, canPuzzle: U || !puzzled,
-           canShake: U || !played.shake, canQuiz: U || !played.quiz,
-           canFortune: U || !played.fortune, canCatch: U || !played.catch,
-           firedToday: fired, days: spinDays(voter) };
+           voteBalance: voteEarned - voteSpent, voteEarned, voteSpent,
+           canSpin: SPIN_UNLIMITED || U || !spun,
+           canPuzzle: gameOpen, canShake: gameOpen, canQuiz: gameOpen,
+           canFortune: gameOpen, canCatch: gameOpen,
+           playedAnyGame, firedToday: fired, days: spinDays(voter) };
 }
 
 // set to false to skip moderation (auto-approve everything, like before)
 const MODERATION = true;
+
+// ── Admin (event organiser) ────────────────────────────────────────
+// Simple password gate, verified server-side. Set ADMIN_KEY via env for the
+// real event; the default is dev-only. Admin is NOT a Google account.
+const ADMIN_KEY = process.env.ADMIN_KEY || 'trungthu2026';
+let ACCEPTING = true;   // toggle: are we accepting new lanterns?
+// signed admin cookie, reusing the same HMAC scheme as the user session
+function signAdmin() {
+  const body = Buffer.from(JSON.stringify({ a: 1, exp: Date.now() + 12 * 3600e3 })).toString('base64url');
+  const sig = crypto.createHmac('sha256', SESSION_SECRET).update('admin.' + body).digest('base64url');
+  return body + '.' + sig;
+}
+function verifyAdmin(token) {
+  if (!token || token.indexOf('.') < 0) return false;
+  const [body, sig] = token.split('.');
+  const expect = crypto.createHmac('sha256', SESSION_SECRET).update('admin.' + body).digest('base64url');
+  if (sig.length !== expect.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expect))) return false;
+  try { const o = JSON.parse(Buffer.from(body, 'base64url').toString()); return o.a === 1 && Date.now() < o.exp; }
+  catch (e) { return false; }
+}
+function requireAdmin(req, res, next) {
+  const raw = req.headers.cookie || '';
+  const m = raw.match(/(?:^|;\s*)ml_admin=([^;]+)/);
+  if (m && verifyAdmin(decodeURIComponent(m[1]))) return next();
+  return res.status(401).json({ error: 'admin_required' });
+}
 
 // ── AI 3D-render step (WPP proxy · gpt-image-2) ────────────────────
 // Turns the child's flat drawing into a realistic, 3D-looking lantern by
@@ -258,6 +350,48 @@ const MODERATION = true;
 // (defaults to http://localhost:3141 — start wpp-api-main first). If the proxy
 // is unreachable OR the call fails, we fall back to the child's drawing so the
 // event never gets stuck.
+//
+// Full art-direction prompt for turning a child's sketch into a physical
+// handcrafted bamboo+cellophane lantern. Used for BOTH template coloring and
+// free-draw (override per-mode with WPP_IMAGE_PROMPT / WPP_IMAGE_PROMPT_FREE).
+const LANTERN_PROMPT =
+  'Transform the submitted child\'s sketch into ONE physically believable, handcrafted ' +
+  'Vietnamese Mid-Autumn lantern. The sketch is the single source of truth for subject, ' +
+  'outer silhouette, internal shapes, proportions, color placement and personality. ' +
+  'PRESERVE the recognizable subject, the complete outer silhouette, the relative position ' +
+  'and scale of every component, the original color family of each area, irregular curves, ' +
+  'uneven proportions and the spontaneous imperfect character of the drawing. Do not beautify, ' +
+  'correct, simplify or redesign it. ' +
+  'CONVERT the principal outlines into thin, hand-bent bamboo ribs defining the outer contour, ' +
+  'important internal divisions and distinctive details, adding only the minimum structural ' +
+  'braces needed to be buildable. The bamboo shows natural texture, slightly uneven thickness, ' +
+  'imperfect hand-bent curves, small tied or glued joints and minor misalignment. Do not force ' +
+  'the drawing into a generic round, oval or star shape. ' +
+  'COVER the spaces between ribs with translucent colored cellophane matching the sketch colors, ' +
+  'with realistic transparency, gentle wrinkles, hand-cut edges, small seams and overlaps, ' +
+  'slightly uneven surface tension, darker color where layers overlap and natural internal ' +
+  'reflections. Preserve blank or open areas from the sketch; do not fill every empty space. ' +
+  'Give it shallow believable 3D volume, like two similar bamboo contour frames connected by ' +
+  'short bamboo spacers, viewed from a front three-quarter camera angle so both the original ' +
+  'shape and its depth are visible; it may be slightly crooked or asymmetrical. ' +
+  'If the sketch has detached elements, keep their original position and connect them only when ' +
+  'structurally necessary with a very thin discreet bamboo bridge or short transparent brace — ' +
+  'never with hanging strings, cords or threads. ' +
+  'Place ONE small warm amber LED inside that gently illuminates the cellophane from within, ' +
+  'reveals the bamboo structure, enriches color where layers overlap and produces a soft warm ' +
+  'glow without excessive bloom, fire, sparks or magical effects. ' +
+  'Show exactly ONE complete lantern floating freely in space with no visible support, centered, ' +
+  'front three-quarter view, entire lantern visible with no cropped parts, clearly separated from ' +
+  'the background, natural handcrafted scale, soft cinematic lighting and realistic material ' +
+  'rendering on a transparent background. ' +
+  'It must NOT look like a flat digital illustration, a smooth plastic object, a polished CGI icon, ' +
+  'an inflatable object, a fabric sculpture or a neon sign. ' +
+  'STRICT: no hanging string, suspension cord, visible thread, hook or ceiling attachment; no hand ' +
+  'holding it; no stand or supporting pole; no added text or logo; no additional characters or ' +
+  'decorative objects; no generic traditional lantern surrounding the design; no correction of the ' +
+  'drawing; no perfect symmetry; no opaque plastic; no smooth vector surfaces; no redesign into a ' +
+  'commercial toy. The lantern floats freely and independently.';
+
 const AI = {
   enabled: (process.env.AI_RENDER ?? '1') !== '0',   // on by default; AI_RENDER=0 to disable
   proxyUrl: (process.env.WPP_PROXY_URL || 'http://localhost:3141').replace(/\/$/, ''),
@@ -266,17 +400,10 @@ const AI = {
   size: process.env.WPP_IMAGE_SIZE || '1024x1024',    // 1024x1024 | 1536x1024 | 1024x1536
   quality: process.env.WPP_IMAGE_QUALITY || 'low',    // auto | low | medium
   background: process.env.WPP_IMAGE_BACKGROUND || 'transparent',  // auto | transparent | opaque
-  prompt: process.env.WPP_IMAGE_PROMPT ||
-    'Transform this child\'s lantern drawing into a realistic 3D Vietnamese Mid-Autumn ' +
-    'paper lantern. Keep the SAME shape, colors and decorations the child drew, but make ' +
-    'it look like a real glowing lantern: warm candlelight from inside, paper texture, ' +
-    'soft shadows, festive studio product render on a transparent background.',
-  // free-draw template: don't force a lantern — render whatever the child actually drew
-  freePrompt: process.env.WPP_IMAGE_PROMPT_FREE ||
-    'Turn this child\'s freehand drawing into a realistic, cute 3D render of the SAME ' +
-    'subject the child drew — keep its shapes, colors and character exactly, just make it ' +
-    'look real and three-dimensional with soft lighting and gentle shadows, glowing softly ' +
-    'as if lit for a Mid-Autumn festival night, on a transparent background.',
+  prompt: process.env.WPP_IMAGE_PROMPT || LANTERN_PROMPT,
+  // free-draw template: turn whatever the child drew INTO a real lantern shaped
+  // like their drawing, with a visible bamboo frame for a realistic look.
+  freePrompt: process.env.WPP_IMAGE_PROMPT_FREE || LANTERN_PROMPT,
   freeTemplate: 'tu-do',
   timeoutMs: Number(process.env.WPP_IMAGE_TIMEOUT || 90000),
   maxRetries: Number(process.env.WPP_IMAGE_RETRIES || 5),   // retry until AI succeeds
@@ -393,6 +520,9 @@ app.get('/qr', (req, res) => {
 app.get('/rank', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'rank.html'));
 });
+app.get('/rank-height', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'rank-height.html'));
+});
 app.get('/spin', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'spin.html'));
 });
@@ -415,21 +545,108 @@ app.get('/hub', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'hub.html'));
 });
 
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+// ── Admin API ──────────────────────────────────────────────────────
+app.post('/api/admin/login', (req, res) => {
+  const key = (req.body && req.body.key || '').toString();
+  if (key !== ADMIN_KEY) return res.status(401).json({ error: 'bad_key' });
+  res.setHeader('Set-Cookie',
+    `ml_admin=${encodeURIComponent(signAdmin())}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${12 * 3600}`);
+  res.json({ ok: true });
+});
+app.post('/api/admin/logout', (req, res) => {
+  res.setHeader('Set-Cookie', 'ml_admin=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
+  res.json({ ok: true });
+});
+// public: is the event accepting new lanterns? (phone checks this)
+app.get('/api/admin/accepting', (req, res) => res.json({ accepting: ACCEPTING }));
+app.post('/api/admin/accepting', requireAdmin, (req, res) => {
+  ACCEPTING = !!(req.body && req.body.on);
+  io.emit('accepting-changed', { accepting: ACCEPTING });
+  res.json({ ok: true, accepting: ACCEPTING });
+});
+// list every lantern (all statuses), newest first
+app.get('/api/admin/lanterns', requireAdmin, (req, res) => {
+  const rows = db.prepare(
+    'SELECT id, file, ai_file, template, name, wish, status, created FROM lanterns ORDER BY id DESC'
+  ).all();
+  res.json({ lanterns: rows, accepting: ACCEPTING });
+});
+// hide from screen/rank -> status='rejected'
+app.post('/api/admin/hide', requireAdmin, (req, res) => {
+  const id = req.body && req.body.id;
+  const row = db.prepare('SELECT id FROM lanterns WHERE id=?').get(id);
+  if (!row) return res.status(404).json({ error: 'not_found' });
+  db.prepare("UPDATE lanterns SET status='rejected' WHERE id=?").run(id);
+  io.emit('remove-lantern', { id });
+  io.emit('pending-changed');
+  res.json({ ok: true });
+});
+// bring back -> status='approved'
+app.post('/api/admin/show', requireAdmin, (req, res) => {
+  const id = req.body && req.body.id;
+  const row = db.prepare('SELECT * FROM lanterns WHERE id=?').get(id);
+  if (!row) return res.status(404).json({ error: 'not_found' });
+  db.prepare("UPDATE lanterns SET status='approved' WHERE id=?").run(id);
+  io.emit('new-lantern', { id: row.id, file: row.ai_file || row.file,
+    template: row.template, name: row.name, wish: row.wish, created: row.created });
+  io.emit('pending-changed');
+  res.json({ ok: true });
+});
+
 // leaderboard: approved lanterns ranked by TOTAL fires over the whole event
 // (newest wins ties). ?voter=... also returns that person's wallet so the page
 // can gate the fire buttons.
 app.get('/api/leaderboard', (req, res) => {
   const day = today();
+  // a lantern's "lửa" (ranking score) = votes it received from others
+  //   + the game-fire its OWNER earned (spins + puzzle + other mini games).
+  // So playing games raises your own lantern, and votes from others add on top.
   const rows = db.prepare(
-    "SELECT l.id, COALESCE(l.ai_file, l.file) AS file, l.name, l.wish, " +
-    "       (SELECT COUNT(*) FROM fires f WHERE f.lantern = l.id) AS fires " +
+    "SELECT l.id, COALESCE(l.ai_file, l.file) AS file, l.name, l.wish, l.user_sub, " +
+    "  (SELECT COUNT(*) FROM votes v WHERE v.lantern = l.id) " +
+    "  + COALESCE((SELECT SUM(reward) FROM spins   WHERE voter = l.user_sub),0) " +
+    "  + COALESCE((SELECT SUM(reward) FROM puzzles WHERE voter = l.user_sub),0) " +
+    "  + COALESCE((SELECT SUM(reward) FROM games   WHERE voter = l.user_sub),0) AS fires " +
     "FROM lanterns l WHERE l.status='approved' " +
     "ORDER BY fires DESC, l.id DESC LIMIT 50"
   ).all();
   // identity comes from the signed session cookie, not a client-supplied param
   const voter = req.user ? req.user.sub : null;
-  res.json({ day, board: rows, wallet: voter ? wallet(voter, day) : null });
+  if (voter) ensureCheckin(voter, day);
+  // don't leak each lantern's owner sub; expose only a `mine` flag for this voter
+  const board = rows.map(({ user_sub, ...r }) => ({ ...r, mine: !!voter && user_sub === voter }));
+  res.json({ day, board, wallet: voter ? wallet(voter, day) : null });
 });
+
+// bảng xếp hạng ĐỘ CAO — xếp height giảm dần; hòa thì đèn xuất hiện sớm hơn (appeared_at, id) đứng trên
+app.get('/api/leaderboard/height', (req, res) => {
+  const rows = db.prepare(
+    "SELECT id, COALESCE(ai_file, file) AS file, name, height, user_sub " +
+    "FROM lanterns WHERE status='approved' AND height > 0 " +
+    "ORDER BY height DESC, COALESCE(appeared_at, created) ASC, id ASC LIMIT 50"
+  ).all();
+  const voter = req.user ? req.user.sub : null;
+  const board = rows.map(({ user_sub, ...r }) => ({ ...r, mine: !!voter && user_sub === voter }));
+  res.json({ board });
+});
+
+// after a voter earns game-fire, their own lantern's score changed — recompute
+// its total lửa (votes + game-fire) and broadcast so open /rank pages resort live.
+function emitOwnerFire(sub) {
+  const lant = db.prepare("SELECT id FROM lanterns WHERE user_sub=? AND status='approved' ORDER BY id DESC LIMIT 1").get(sub);
+  if (!lant) return;
+  const fires = db.prepare(
+    "SELECT (SELECT COUNT(*) FROM votes WHERE lantern=?) " +
+    "  + COALESCE((SELECT SUM(reward) FROM spins   WHERE voter=?),0) " +
+    "  + COALESCE((SELECT SUM(reward) FROM puzzles WHERE voter=?),0) " +
+    "  + COALESCE((SELECT SUM(reward) FROM games   WHERE voter=?),0) AS n"
+  ).get(lant.id, sub, sub, sub).n;
+  io.emit('fire-changed', { id: lant.id, fires });
+}
 
 // spin the wheel once per day -> earn 1–4 fires. Returns the landed segment
 // index (so the UI can animate to it) and the reward.
@@ -451,32 +668,48 @@ app.post('/api/spin', requireAuth, (req, res) => {
     db.prepare('INSERT INTO spins (voter, day, reward, created) VALUES (?, ?, ?, ?)')
       .run(v, day, bonus, Date.now());
   }
+  emitOwnerFire(v);
   res.json({ ok: true, segment, reward, bonus, days, wheel: WHEEL, wallet: wallet(v, day) });
 });
 
-// roll-the-mooncake maze: client sends score 0..100 (goals reached / speed).
-// Reward scales 1..PUZZLE_MAX_REWARD. First play per day only.
+// when testing is OFF, a voter may play only ONE mini game per day. Returns true
+// if they've already played any of the 5 today (so the route should reject).
+function playedAnyGameToday(voter, day) {
+  if (GAMES_UNLIMITED) return false;
+  const p = db.prepare('SELECT 1 FROM puzzles WHERE voter=? AND day=?').get(voter, day);
+  const g = db.prepare('SELECT 1 FROM games WHERE voter=? AND day=?').get(voter, day);
+  return !!(p || g);
+}
+
+// roll-the-mooncake maze: client sends `goals` (how many times it reached the
+// lantern). Fire table: 1-3 -> 1, 4-6 -> 2, 7-9 -> 3 … capped at PUZZLE_MAX_REWARD.
+// First play per day only.
 app.post('/api/puzzle/win', requireAuth, (req, res) => {
   const day = today();
   const v = req.user.sub;
-  const score = Math.max(0, Math.min(100, Number(req.body?.score) || 0));
-  const reward = Math.max(1, Math.round(score / 100 * PUZZLE_MAX_REWARD));
+  if (playedAnyGameToday(v, day)) return res.status(409).json({ error: 'daily_limit', wallet: wallet(v, day) });
+  const goals = Math.max(0, Math.min(99, Number(req.body?.goals) || 0));
+  // fire table by score: 1-3 goals -> 1 lửa, 4-6 -> 2, 7-9 -> 3 … (capped at PUZZLE_MAX_REWARD)
+  const reward = Math.min(PUZZLE_MAX_REWARD, Math.max(1, Math.ceil(goals / 3)));
   const r = db.prepare('INSERT OR IGNORE INTO puzzles (voter, day, reward, created) VALUES (?, ?, ?, ?)')
     .run(v, gameDay(day), reward, Date.now());
   if (r.changes === 0) return res.status(409).json({ error: 'already_won', wallet: wallet(v, day) });
-  res.json({ ok: true, reward, score, wallet: wallet(v, day) });
+  emitOwnerFire(v);
+  res.json({ ok: true, reward, goals, wallet: wallet(v, day) });
 });
 
-// shake game: client sends score 0..100 (how hard they shook). Reward scales
-// 1..SHAKE_MAX_REWARD. First play per day only (UNIQUE(voter,day,game)).
+// shake game: client sends score 0..100 (how hard they shook). Fire table by
+// intensity: >=80% -> 4, 50-79% -> 3, <50% -> 2. First play per day only.
 app.post('/api/shake/win', requireAuth, (req, res) => {
   const day = today();
   const v = req.user.sub;
+  if (playedAnyGameToday(v, day)) return res.status(409).json({ error: 'daily_limit', wallet: wallet(v, day) });
   const score = Math.max(0, Math.min(100, Number(req.body?.score) || 0));
-  const reward = Math.max(1, Math.round(score / 100 * SHAKE_MAX_REWARD));
+  const reward = score >= 80 ? SHAKE_MAX_REWARD : score >= 50 ? 3 : 2;
   const r = db.prepare("INSERT OR IGNORE INTO games (voter, day, game, reward, data, created) VALUES (?, ?, 'shake', ?, ?, ?)")
     .run(v, gameDay(day), reward, JSON.stringify({ score }), Date.now());
   if (r.changes === 0) return res.status(409).json({ error: 'already_played', wallet: wallet(v, day) });
+  emitOwnerFire(v);
   res.json({ ok: true, reward, score, wallet: wallet(v, day) });
 });
 
@@ -485,43 +718,176 @@ app.post('/api/shake/win', requireAuth, (req, res) => {
 app.post('/api/quiz/win', requireAuth, (req, res) => {
   const day = today();
   const v = req.user.sub;
+  if (playedAnyGameToday(v, day)) return res.status(409).json({ error: 'daily_limit', wallet: wallet(v, day) });
   const result = (req.body?.result || '').toString().slice(0, 40);
   const r = db.prepare("INSERT OR IGNORE INTO games (voter, day, game, reward, data, created) VALUES (?, ?, 'quiz', ?, ?, ?)")
     .run(v, gameDay(day), QUIZ_REWARD, JSON.stringify({ result }), Date.now());
   if (r.changes === 0) return res.status(409).json({ error: 'already_played', wallet: wallet(v, day) });
+  emitOwnerFire(v);
   res.json({ ok: true, reward: QUIZ_REWARD, wallet: wallet(v, day) });
 });
 
-// bake-the-mooncake: client sends score 0..100 (how long the oven stayed in the
-// target heat zone). Reward scales 1..BAKE_MAX_REWARD. First play per day only.
+// bake-the-mooncake: client sends score 0..100 (in-zone time + combo bonus).
+// Fire table: >=80% -> 4, 50-79% -> 3, <50% -> 2. First play per day only.
 app.post('/api/fortune/win', requireAuth, (req, res) => {
   const day = today();
   const v = req.user.sub;
+  if (playedAnyGameToday(v, day)) return res.status(409).json({ error: 'daily_limit', wallet: wallet(v, day) });
   const score = Math.max(0, Math.min(100, Number(req.body?.score) || 0));
-  const reward = Math.max(1, Math.round(score / 100 * BAKE_MAX_REWARD));
+  const reward = score >= 80 ? BAKE_MAX_REWARD : score >= 50 ? 3 : 2;
   const r = db.prepare("INSERT OR IGNORE INTO games (voter, day, game, reward, data, created) VALUES (?, ?, 'fortune', ?, ?, ?)")
     .run(v, gameDay(day), reward, JSON.stringify({ score }), Date.now());
   if (r.changes === 0) return res.status(409).json({ error: 'already_played', wallet: wallet(v, day) });
+  emitOwnerFire(v);
   res.json({ ok: true, reward, score, wallet: wallet(v, day) });
 });
 
-// catch-the-rabbit: client sends score 0..100 (how many caught). Reward scales
-// 1..CATCH_MAX_REWARD. First play per day only.
+// catch-the-rabbit: client sends `score` = catch rate % (caught / spawned).
+// Fire table by accuracy: >=80% -> 4, 50-79% -> 3, <50% -> 2. First play per day only.
 app.post('/api/catch/win', requireAuth, (req, res) => {
   const day = today();
   const v = req.user.sub;
+  if (playedAnyGameToday(v, day)) return res.status(409).json({ error: 'daily_limit', wallet: wallet(v, day) });
   const score = Math.max(0, Math.min(100, Number(req.body?.score) || 0));
-  const reward = Math.max(1, Math.round(score / 100 * CATCH_MAX_REWARD));
+  const reward = score >= 80 ? CATCH_MAX_REWARD : score >= 50 ? 3 : 2;
   const r = db.prepare("INSERT OR IGNORE INTO games (voter, day, game, reward, data, created) VALUES (?, ?, 'catch', ?, ?, ?)")
     .run(v, gameDay(day), reward, JSON.stringify({ score }), Date.now());
   if (r.changes === 0) return res.status(409).json({ error: 'already_played', wallet: wallet(v, day) });
+  emitOwnerFire(v);
   res.json({ ok: true, reward, score, wallet: wallet(v, day) });
 });
+
+// ── Game "tạo gió" tăng độ cao (bước 5) ────────────────────────────
+// đèn approved mới nhất của user (kèm appeared + height)
+function myLanternRow(sub){
+  return db.prepare(
+    "SELECT id, appeared, height FROM lanterns WHERE user_sub=? AND status='approved' ORDER BY id DESC LIMIT 1"
+  ).get(sub);
+}
+function heightPlaysUsed(sub, day){
+  return db.prepare('SELECT COUNT(*) AS n FROM height_plays WHERE user_sub=? AND day=?').get(sub, day).n;
+}
+function activePlay(sub){
+  const now = Date.now();
+  return db.prepare('SELECT * FROM height_plays WHERE user_sub=? AND finalized=0 AND ends_at>? ORDER BY id DESC LIMIT 1').get(sub, now);
+}
+
+// trạng thái bước 5: độ cao, lượt còn lại, lượt đang chạy (nếu có)
+app.get('/api/height/state', requireAuth, (req, res) => {
+  const sub = req.user.sub, day = todayVN();
+  const lant = myLanternRow(sub);
+  if (!lant) return res.json({ hasLantern: false });
+  const used = heightPlaysUsed(sub, day);
+  const ap = activePlay(sub);
+  res.json({
+    hasLantern: true, appeared: !!lant.appeared, height: lant.height,
+    playsLeft: Math.max(0, HEIGHT_CFG.playsPerDay - used),
+    playsPerDay: HEIGHT_CFG.playsPerDay, durationMs: HEIGHT_CFG.durationMs,
+    active: ap ? { id: ap.id, endsAt: ap.ends_at } : null,
+  });
+});
+
+// bắt đầu 1 lượt — idempotent theo request_id, trừ 1 lượt khi tạo mới
+app.post('/api/height/start', requireAuth, (req, res) => {
+  const sub = req.user.sub, day = todayVN(), now = Date.now();
+  const rid = (req.body && req.body.request_id || '').toString().slice(0, 64);
+  if (!rid) return res.status(400).json({ error: 'need_request_id' });
+  const lant = myLanternRow(sub);
+  if (!lant) return res.status(404).json({ error: 'no_lantern' });
+  if (!lant.appeared) return res.status(403).json({ error: 'not_appeared' });
+  // cùng request_id -> trả lại lượt đã tạo (không tạo mới, không trừ thêm)
+  const existing = db.prepare('SELECT * FROM height_plays WHERE request_id=?').get(rid);
+  if (existing) return res.json({ ok: true, playId: existing.id, endsAt: existing.ends_at, resumed: true });
+  // đang có lượt chạy dở -> khôi phục thay vì tạo mới
+  const ap = activePlay(sub);
+  if (ap) return res.json({ ok: true, playId: ap.id, endsAt: ap.ends_at, resumed: true });
+  // hết lượt?
+  if (heightPlaysUsed(sub, day) >= HEIGHT_CFG.playsPerDay)
+    return res.status(403).json({ error: 'no_plays_left', playsLeft: 0 });
+  const endsAt = now + HEIGHT_CFG.durationMs;
+  const info = db.prepare(
+    'INSERT INTO height_plays (user_sub, lantern_id, day, request_id, started_at, ends_at, created) VALUES (?,?,?,?,?,?,?)'
+  ).run(sub, lant.id, day, rid, now, endsAt, now);
+  res.json({ ok: true, playId: info.lastInsertRowid, endsAt,
+    playsLeft: Math.max(0, HEIGHT_CFG.playsPerDay - heightPlaysUsed(sub, day)) });
+});
+
+// chốt 1 lượt — server tính mét từ số hits (đã chặn trần), cộng vào lantern.height
+app.post('/api/height/finish', requireAuth, (req, res) => {
+  const sub = req.user.sub, day = todayVN(), now = Date.now();
+  const playId = Number(req.body && req.body.play_id);
+  const hits = Math.max(0, Number(req.body && req.body.hits) || 0);
+  const play = db.prepare('SELECT * FROM height_plays WHERE id=? AND user_sub=?').get(playId, sub);
+  if (!play) return res.status(404).json({ error: 'no_play' });
+  const lant = db.prepare('SELECT id, height FROM lanterns WHERE id=?').get(play.lantern_id);
+  // đã chốt rồi -> idempotent: trả kết quả cũ, không cộng lần nữa
+  if (play.finalized) {
+    return res.json({ ok: true, added: play.meters, total: lant ? lant.height : 0,
+      playsLeft: Math.max(0, HEIGHT_CFG.playsPerDay - heightPlaysUsed(sub, day)), already: true });
+  }
+  // chặn trần hits theo thời lượng, đổi ra mét
+  const capped = Math.min(hits, HEIGHT_CFG.maxHits);
+  const added = Math.min(capped * HEIGHT_CFG.metersPerHit, HEIGHT_CFG.maxMeters);
+  const tx = db.transaction(() => {
+    db.prepare('UPDATE height_plays SET finalized=1, meters=? WHERE id=?').run(added, playId);
+    db.prepare('UPDATE lanterns SET height=height+? WHERE id=?').run(added, play.lantern_id);
+  });
+  tx();
+  const total = db.prepare('SELECT height FROM lanterns WHERE id=?').get(play.lantern_id).height;
+  io.emit('height-changed', { id: play.lantern_id, height: total });
+  res.json({ ok: true, added, total,
+    playsLeft: Math.max(0, HEIGHT_CFG.playsPerDay - heightPlaysUsed(sub, day)) });
+});
+
+// record today's check-in (idempotent) -> grants +1 vote the first time each day
+function ensureCheckin(voter, day) {
+  db.prepare('INSERT OR IGNORE INTO checkins (voter, day, created) VALUES (?, ?, ?)')
+    .run(voter, day, Date.now());
+}
 
 // how many fires this voter still has to spend today (and whether they've spun)
 app.get('/api/wallet', (req, res) => {
   if (!req.user) return res.json({ day: today(), wheel: WHEEL, wallet: null });
+  ensureCheckin(req.user.sub, today());   // showing up today = +1 vote (once/day)
   res.json({ day: today(), wheel: WHEEL, wallet: wallet(req.user.sub, today()) });
+});
+
+// cast N votes on a lantern (default 1). Votes are separate from fire; you may
+// pile several on one lantern or spread them, but never vote your own lantern.
+app.post('/api/vote', requireAuth, (req, res) => {
+  const day = today();
+  const v = req.user.sub;
+  const lanternId = Number(req.body?.id);
+  const n = Math.max(1, Math.min(50, Number(req.body?.n) || 1));
+  if (!lanternId) return res.status(400).json({ error: 'need id' });
+  const row = db.prepare("SELECT id, user_sub FROM lanterns WHERE id=? AND status='approved'").get(lanternId);
+  if (!row) return res.status(404).json({ error: 'not found' });
+  if (row.user_sub && row.user_sub === v) return res.status(403).json({ error: 'no_self_vote', wallet: wallet(v, day) });
+  ensureCheckin(v, day);
+  const w = wallet(v, day);
+  if (w.voteBalance < n) return res.status(403).json({ error: 'not_enough_votes', wallet: w });
+  const ins = db.prepare('INSERT INTO votes (lantern, voter, day, created) VALUES (?, ?, ?, ?)');
+  const tx = db.transaction(() => { for (let i=0;i<n;i++) ins.run(lanternId, v, day, Date.now()); });
+  tx();
+  // total lửa = votes received + the target owner's own game-fire (match the board)
+  const votesGot = db.prepare('SELECT COUNT(*) AS n FROM votes WHERE lantern=?').get(lanternId).n;
+  const owner = row.user_sub;
+  const gameFire = owner ? db.prepare(
+    "SELECT COALESCE((SELECT SUM(reward) FROM spins   WHERE voter=?),0) " +
+    "     + COALESCE((SELECT SUM(reward) FROM puzzles WHERE voter=?),0) " +
+    "     + COALESCE((SELECT SUM(reward) FROM games   WHERE voter=?),0) AS n"
+  ).get(owner, owner, owner).n : 0;
+  const fires = votesGot + gameFire;
+  io.emit('fire-changed', { id: lanternId, fires });
+  res.json({ ok: true, fires, wallet: wallet(v, day) });
+});
+
+// testing toggle: ON = play every game unlimited times; OFF = once per day.
+// Server-wide (affects everyone) and resets to the env default on restart.
+app.get('/api/testing', (req, res) => res.json({ testing: GAMES_UNLIMITED }));
+app.post('/api/testing', (req, res) => {
+  GAMES_UNLIMITED = !!(req.body && req.body.on);
+  res.json({ testing: GAMES_UNLIMITED });
 });
 
 // spend one fire on a lantern. Requires balance > 0 and not already fired today.
@@ -559,14 +925,25 @@ app.get('/api/templates', (req, res) => {
 app.get('/api/my-lantern', (req, res) => {
   if (!req.user) return res.json({ lantern: null });
   const row = db.prepare(
-    "SELECT id, COALESCE(ai_file, file) AS file, name, wish, status FROM lanterns " +
+    "SELECT id, COALESCE(ai_file, file) AS file, name, wish, status, appeared, height FROM lanterns " +
     "WHERE user_sub=? AND status='approved' ORDER BY id DESC LIMIT 1"
   ).get(req.user.sub);
   if (!row) return res.json({ lantern: null });
-  const fires = db.prepare('SELECT COUNT(*) AS n FROM fires WHERE lantern=?').get(row.id).n;
+  // score = votes received + this owner's own game-fire (same formula as the board)
+  const sub = req.user.sub;
+  const gameFire = db.prepare(
+    "SELECT COALESCE((SELECT SUM(reward) FROM spins   WHERE voter=?),0) " +
+    "     + COALESCE((SELECT SUM(reward) FROM puzzles WHERE voter=?),0) " +
+    "     + COALESCE((SELECT SUM(reward) FROM games   WHERE voter=?),0) AS n"
+  ).get(sub, sub, sub).n;
+  const votesGot = db.prepare('SELECT COUNT(*) AS n FROM votes WHERE lantern=?').get(row.id).n;
+  const fires = votesGot + gameFire;
   const rank = db.prepare(
     "SELECT COUNT(*)+1 AS r FROM lanterns l WHERE l.status='approved' AND " +
-    "(SELECT COUNT(*) FROM fires f WHERE f.lantern=l.id) > ?"
+    "( (SELECT COUNT(*) FROM votes v WHERE v.lantern=l.id) " +
+    "  + COALESCE((SELECT SUM(reward) FROM spins   WHERE voter=l.user_sub),0) " +
+    "  + COALESCE((SELECT SUM(reward) FROM puzzles WHERE voter=l.user_sub),0) " +
+    "  + COALESCE((SELECT SUM(reward) FROM games   WHERE voter=l.user_sub),0) ) > ?"
   ).get(fires).r;
   res.json({ lantern: { ...row, fires, rank } });
 });
@@ -672,6 +1049,7 @@ app.post('/release', requireAuth, (req, res) => {
 
 // phone posts { image: "data:image/png;base64,...", template: "star", name: "Bi" }
 app.post('/submit', (req, res) => {
+  if (!ACCEPTING) return res.status(503).json({ error: 'closed' });
   const { image, template, name } = req.body || {};
   if (!image || !image.startsWith('data:image/png;base64,')) {
     return res.status(400).json({ error: 'need a PNG data URL' });
@@ -791,7 +1169,17 @@ async function runAI(id, srcBuf, template) {
 
 const server = http.createServer(app);
 const io = new Server(server);
-io.on('connection', (s) => console.log('screen connected:', s.id));
+io.on('connection', (s) => {
+  console.log('screen connected:', s.id);
+  // /screen báo đèn đã hiển thị -> đánh dấu appeared (1 lần) -> báo về điện thoại
+  s.on('lantern-shown', ({ id } = {}) => {
+    if (id == null) return;
+    const row = db.prepare('SELECT id, appeared FROM lanterns WHERE id=?').get(id);
+    if (!row || row.appeared) return;                 // chống lặp: chỉ lần đầu
+    db.prepare('UPDATE lanterns SET appeared=1, appeared_at=? WHERE id=?').run(Date.now(), id);
+    io.emit('lantern-appeared', { id });
+  });
+});
 
 // find this laptop's LAN IP so phones on the same WiFi can reach it
 function lanIP() {

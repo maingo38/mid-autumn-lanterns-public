@@ -1,0 +1,18 @@
+{
+  "_help": "Danh sách mẫu lồng đèn. id = tên file trong public/templates/ (id_lines.png + id_mask.png). name = tên hiển thị. order = thứ tự (nhỏ hiện trước). Sửa file này rồi refresh trang, KHÔNG cần đụng code. Mẫu có trong thư mục nhưng thiếu ở đây vẫn hiện (tên tự suy ra) và xếp cuối.",
+  "templates": [
+    { "id": "tu-do",                 "name": "✏️ Vẽ tự do",            "order": 0 },
+    { "id": "ca-chep",               "name": "Cá chép",               "order": 1 },
+    { "id": "con-rong",              "name": "Con rồng",              "order": 2 },
+    { "id": "rong-con",              "name": "Rồng con",              "order": 3 },
+    { "id": "hoa-sen",               "name": "Hoa sen",               "order": 4 },
+    { "id": "ong-sao",               "name": "Ông sao",               "order": 5 },
+    { "id": "tho-ngoc",              "name": "Thỏ ngọc",              "order": 6 },
+    { "id": "tho-trong-am-tra",      "name": "Thỏ trong ấm trà",      "order": 7 },
+    { "id": "meo-om-trang",          "name": "Mèo ôm trăng",          "order": 8 },
+    { "id": "ca-noc",                "name": "Cá nóc",                "order": 9 },
+    { "id": "sua",                   "name": "Con sứa",               "order": 10 },
+    { "id": "tau-vu-tru",            "name": "Tàu vũ trụ",            "order": 11 },
+    { "id": "long-den-truyen-thong", "name": "Lồng đèn truyền thống", "order": 12 }
+  ]
+}

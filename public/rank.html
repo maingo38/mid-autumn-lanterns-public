@@ -8,7 +8,7 @@
   :root{ --gold:#ffd77a; --gold2:#ffe9b0; --deep:#0a0620; }
   *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-    color:#fff; background:radial-gradient(120% 90% at 50% -10%, #241653 0%, var(--deep) 60%, #05030f 100%);
+    color:#fff; background:#0d0a26 url('/decor/Background.jpeg') center top / cover no-repeat fixed;
     min-height:100vh; overflow-x:hidden; }
   header{ text-align:center; padding:20px 16px 6px; }
   h1{ margin:0; font-size:clamp(26px,6vw,44px); font-weight:800;
@@ -25,6 +25,16 @@
     color:#fff; font-weight:800; padding:9px 18px; border-radius:999px; box-shadow:0 4px 14px rgba(255,120,20,.5); }
   .hint{ text-align:center; color:#ffbe6b; font-size:13px; margin:10px 12px 0; }
 
+  /* two stat cards: Lửa (from games) + Vote (daily check-in) */
+  .stats{ display:flex; gap:10px; max-width:640px; margin:12px auto 0; padding:0 12px; }
+  .stat{ flex:1; border-radius:16px; padding:12px 14px; text-align:center;
+    background:linear-gradient(180deg,#241a45,#1a1233); border:1.5px solid rgba(255,215,120,.28);
+    box-shadow:0 4px 14px rgba(0,0,0,.4); }
+  .stat .ic{ font-size:26px; display:block; filter:drop-shadow(0 0 8px #ffb84daa); }
+  .stat .v{ font-size:24px; font-weight:900; color:var(--gold2); margin-top:2px; }
+  .stat .lbl{ font-size:12px; color:#cbb8ff; font-weight:700; margin-top:1px; }
+  .stat.vote{ border-color:rgba(255,140,26,.5); background:linear-gradient(180deg,#3a2412,#2a1608); }
+
   .podium{ display:flex; justify-content:center; align-items:flex-end; gap:14px; padding:14px 12px 6px; max-width:640px; margin:0 auto; }
   .pod{ flex:1; text-align:center; }
   .pod .halo{ position:relative; margin:0 auto; }
@@ -39,14 +49,15 @@
 
   .list{ max-width:640px; margin:10px auto 40px; padding:10px 12px 0; }
   .row{ display:flex; align-items:center; gap:12px; padding:10px 12px; margin:8px 0;
-    background:linear-gradient(180deg, rgba(60,40,120,.45), rgba(30,20,70,.4));
-    border:1px solid rgba(255,215,120,.18); border-radius:16px;
+    background:linear-gradient(180deg, #241a45, #1a1233);
+    border:1px solid rgba(255,215,120,.3); border-radius:16px;
+    box-shadow:0 4px 14px rgba(0,0,0,.45);
     transition:transform .35s cubic-bezier(.2,.9,.3,1.2), box-shadow .3s; }
   .row.flash{ box-shadow:0 0 0 2px var(--gold), 0 0 26px rgba(255,200,90,.6); }
   /* the signed-in user's own lantern, pinned on top */
   .row.mine{ position:sticky; top:6px; z-index:5;
-    background:linear-gradient(180deg, rgba(255,140,26,.32), rgba(181,52,12,.28));
-    border:1.5px solid var(--gold); box-shadow:0 0 22px rgba(255,200,90,.45); }
+    background:linear-gradient(180deg, #d9741a, #9c3410);
+    border:1.5px solid var(--gold); box-shadow:0 0 22px rgba(255,200,90,.45), 0 4px 14px rgba(0,0,0,.5); }
   .row.mine .name{ color:var(--gold2); }
   .row.mine::before{ content:'Lồng đèn của bạn'; position:absolute; top:-9px; left:12px;
     font-size:10px; font-weight:800; color:#3a1500; background:var(--gold);
@@ -66,17 +77,32 @@
   .empty{ text-align:center; color:#c9bfff; margin-top:40px; }
   .float{ position:fixed; pointer-events:none; font-size:26px; z-index:50; animation:rise 1s ease-out forwards; }
   @keyframes rise{ from{ transform:translateY(0); opacity:1 } to{ transform:translateY(-70px); opacity:0 } }
+  /* lu1edbp phu1ee7 tu1889 nhu1eb9 tru00ean nu1ec1n demo -> chu1eef du1ec5 u0111u1ecdc */
+  body::before{ content:''; position:fixed; inset:0; z-index:0; pointer-events:none;
+    background:linear-gradient(180deg, #06040f55 0%, #06040fdd 30%, #06040f 62%); }
+  /* nội dung nổi trên overlay */
+  header, .wallet, .stats, .hint, .podium, .list{ position:relative; z-index:1; }
 </style>
 </head>
 <body>
   <header>
     <h1>🏮 Đèn Sáng Nhất</h1>
-    <div class="sub">Đèn được yêu thích nhất <b>cả mùa Trung Thu</b> — lửa tích luỹ suốt 5 ngày!</div>
+    <div class="sub">Đèn được bình chọn nhiều nhất <b>cả mùa Trung Thu</b> — xếp hạng theo số 🗳️ vote</div>
   </header>
   <div class="wallet">
     <a class="spinlink" href="/hub" style="background:#3a2168;">← Trang chính</a>
-    <span class="bal" id="bal">🔥 …</span>
-    <a class="spinlink" href="/spin">🎡 Quay thêm lửa</a>
+  </div>
+  <div class="stats">
+    <div class="stat">
+      <span class="ic">🔥</span>
+      <div class="v" id="statGame">…</div>
+      <div class="lbl">Lửa đèn của bạn</div>
+    </div>
+    <div class="stat vote">
+      <span class="ic">🗳️</span>
+      <div class="v" id="statVote">…</div>
+      <div class="lbl">Vote để tặng</div>
+    </div>
   </div>
   <div class="hint" id="hint"></div>
   <div class="podium" id="podium"></div>
@@ -86,11 +112,13 @@
   <script>
     // identity comes from the Google session cookie now; no localStorage id.
 
-    let board = [], wallet = { balance:0, canSpin:true, firedToday:[] };
+    let board = [], wallet = { voteBalance:0 };
     let myId = null;   // id of the signed-in user's own lantern (if any)
+    let myFires = 0;   // lửa (votes received) on the user's own lantern
     const podium = document.getElementById('podium');
     const list = document.getElementById('list');
-    const balEl = document.getElementById('bal');
+    const statGameEl = document.getElementById('statGame');
+    const statVoteEl = document.getElementById('statVote');
     const hintEl = document.getElementById('hint');
 
     async function load(){
@@ -100,20 +128,21 @@
       ]);
       board = lb.board; if (lb.wallet) wallet = lb.wallet;
       myId = mine.lantern ? mine.lantern.id : null;
+      myFires = mine.lantern ? (mine.lantern.fires || 0) : 0;
       render();
     }
 
     function renderWallet(){
-      balEl.textContent = '🔥 ' + wallet.balance + ' lửa';
-      if (wallet.balance > 0) hintEl.innerHTML = 'Bấm 🔥 để tặng lửa cho lồng đèn bạn thích (mỗi đèn 1 lửa/ngày, lửa tích luỹ cả mùa).';
-      else if (wallet.canSpin) hintEl.innerHTML = 'Hết lửa rồi! <b>Quay vòng quay</b> để nhận thêm lửa 🎡';
-      else hintEl.innerHTML = 'Bạn đã dùng hết lửa. Mai quay lại để nhận thêm nhé! 🌙';
+      const vb = wallet.voteBalance || 0;
+      statGameEl.textContent = myFires;      // lửa on YOUR lantern (votes received)
+      statVoteEl.textContent = vb;           // votes you still have to give
+      if (vb > 0) hintEl.innerHTML = 'Bạn có <b>' + vb + ' vote</b> 🗳️ — bấm để bình chọn cho đèn bạn thích. Dồn cho 1 đèn hay chia nhiều đèn tuỳ bạn (không bầu cho đèn của mình).';
+      else hintEl.innerHTML = 'Hết vote rồi! Mỗi ngày ghé thăm bạn nhận thêm <b>+1 vote</b> 🗳️';
     }
 
     function render(){
       renderWallet();
-      const firedSet = new Set(wallet.firedToday || []);
-      const canFire = wallet.balance > 0;
+      const canVote = (wallet.voteBalance || 0) > 0;
 
       const top = board.slice(0,3);
       const order = [top[1], top[0], top[2]].filter(Boolean);
@@ -131,16 +160,18 @@
       // pin the user's own lantern to the top of the list (but keep its REAL rank
       // number), so they immediately see where they stand.
       let rows = board.map((b,i)=>({ b, rank:i+1 }));
+      // pin the user's own lantern near the top for visibility — but NEVER above
+      // the #1 lantern. Top 1 always stays first; mine slots in right after it.
       if (myId != null){
         const mineIdx = rows.findIndex(x=>x.b.id===myId);
-        if (mineIdx > -1){ const [mine] = rows.splice(mineIdx,1); rows.unshift(mine); }
+        if (mineIdx > 1){ const [mine] = rows.splice(mineIdx,1); rows.splice(1,0,mine); }
       }
       rows.forEach(({b, rank})=>{
-        const done = firedSet.has(b.id);
-        const isMine = b.id === myId;
+        const isMine = (b.id === myId) || b.mine;   // can't vote your own lantern
         const row = document.createElement('div');
         row.className = 'row' + (isMine ? ' mine' : ''); row.dataset.id = b.id;
-        const btnCls = done ? 'done' : (canFire ? '' : 'disabled');
+        const btnCls = isMine ? 'disabled' : (canVote ? '' : 'disabled');
+        const btnLabel = isMine ? '—' : '🗳️';
         row.innerHTML = `
           <div class="pos">${rank===1?'👑':'#'+rank}</div>
           <img class="thumb" src="/lanterns/${b.file}" alt="">
@@ -149,20 +180,20 @@
             <div class="wish">${esc(b.wish)||''}</div>
           </div>
           <div class="fire">
-            <span class="count">${b.fires}</span>
-            <button class="btn ${btnCls}" ${done?'disabled':''}>${done?'✓':'🔥'}</button>
+            <span class="count">🔥 ${b.fires}</span>
+            <button class="btn ${btnCls}" ${isMine?'disabled':''}>${btnLabel}</button>
           </div>`;
         const btn = row.querySelector('.btn');
-        if(!done) btn.addEventListener('click', e => fire(b.id, e.currentTarget));
+        if(!isMine) btn.addEventListener('click', e => vote(b.id, e.currentTarget));
         list.appendChild(row);
       });
     }
 
-    async function fire(id, btn){
-      if (wallet.balance <= 0) { location.href = '/spin'; return; }
-      const resp = await fetch('/api/fire', {
+    async function vote(id, btn){
+      if ((wallet.voteBalance || 0) <= 0) { render(); return; }
+      const resp = await fetch('/api/vote', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ id })
+        body: JSON.stringify({ id, n: 1 })
       });
       if (resp.status === 401){ location.href = '/'; return; }
       const r = await resp.json();
@@ -183,7 +214,7 @@
     function floatEmoji(btn){
       const r = btn.getBoundingClientRect();
       const f = document.createElement('div');
-      f.className='float'; f.textContent='🔥';
+      f.className='float'; f.textContent='🗳️';
       f.style.left = r.left + r.width/2 - 13 + 'px'; f.style.top = r.top - 6 + 'px';
       document.body.appendChild(f); setTimeout(()=>f.remove(), 1000);
     }

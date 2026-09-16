@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Bay Cao Nhất</title>
+<style>
+  :root{ --navy:#030B25; --card:#14264B; --card-border:#425B91; --gold:#ffd77a; --gold2:#ffe9b0; --desc:#C4CDE3; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; min-height:100%; }
+  body{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; color:#fff;
+    background:var(--navy) url('/decor/Background.jpeg') center top / cover no-repeat fixed; min-height:100vh; }
+  body::before{ content:''; position:fixed; inset:0; z-index:0; pointer-events:none;
+    background:linear-gradient(180deg,#06040f55 0%,#06040fcc 60%,#06040f 100%); }
+  .wrap{ position:relative; z-index:1; max-width:560px; margin:0 auto; padding:calc(16px + env(safe-area-inset-top)) 16px 40px; }
+  .top{ display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+  .back{ width:40px; height:40px; border-radius:50%; border:1px solid var(--card-border);
+    background:rgba(20,14,40,.6); color:#fff; font-size:24px; font-weight:800; text-decoration:none;
+    display:flex; align-items:center; justify-content:center; }
+  h1{ margin:0; font-size:22px; font-weight:800;
+    background:linear-gradient(90deg,#ffe9b0,#ffd166,#ff8c1a);
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+  .row{ display:flex; align-items:center; gap:12px; padding:10px 12px; margin:8px 0;
+    background:linear-gradient(180deg,#241a45,#1a1233); border:1px solid rgba(255,215,120,.3);
+    border-radius:16px; box-shadow:0 4px 14px rgba(0,0,0,.45); }
+  .row.mine{ border:1.5px solid var(--gold); box-shadow:0 0 18px rgba(255,200,90,.4); }
+  .pos{ width:26px; text-align:center; font-weight:800; color:var(--gold); font-size:17px; flex:none; }
+  .thumb{ width:52px; height:52px; flex:none; object-fit:contain; }
+  .nm{ flex:1; min-width:0; font-weight:700; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .h{ font-weight:800; color:var(--gold2); font-size:16px; }
+  .empty{ text-align:center; color:var(--desc); margin-top:40px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <a class="back" href="/">‹</a>
+      <h1>🎈 Bay Cao Nhất</h1>
+    </div>
+    <div id="list"><div class="empty">Đang tải…</div></div>
+  </div>
+  <script>
+    const fmtVN = n => (n||0).toLocaleString('vi-VN');
+    async function load(){
+      let d; try{ d = await (await fetch('/api/leaderboard/height')).json(); }catch(e){ d={board:[]}; }
+      const list = document.getElementById('list');
+      if (!d.board || !d.board.length){ list.innerHTML = '<div class="empty">Chưa có lồng đèn nào bay cao. Chơi tạo gió để lên bảng nhé!</div>'; return; }
+      list.innerHTML = d.board.map((b,i)=>`
+        <div class="row ${b.mine?'mine':''}">
+          <div class="pos">${i===0?'👑':'#'+(i+1)}</div>
+          <img class="thumb" src="/lanterns/${b.file}" alt="">
+          <div class="nm">${esc(b.name)||'Bé giấu tên'}${b.mine?' (bạn)':''}</div>
+          <div class="h">${fmtVN(b.height)} m</div>
+        </div>`).join('');
+    }
+    const esc = s => (s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+    load();
+  </script>
+</body>
+</html>

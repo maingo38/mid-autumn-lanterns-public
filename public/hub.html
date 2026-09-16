@@ -8,7 +8,7 @@
   :root{ --gold:#ffd77a; --gold2:#ffe9b0; --deep:#0a0620; }
   *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-user-select:none; user-select:none; }
   body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-    color:#fff; background:radial-gradient(130% 100% at 50% -10%, #2a1a5e 0%, var(--deep) 58%, #05030f 100%);
+    color:#fff; background:#0d0a26 url('/decor/Background.jpeg') center top / cover no-repeat fixed;
     min-height:100vh; overflow-x:hidden; display:flex; flex-direction:column; align-items:center; }
   body::after{ content:''; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.5;
     background-image:radial-gradient(1.5px 1.5px at 20% 30%, #fff, transparent), radial-gradient(1.5px 1.5px at 70% 20%, #fff, transparent), radial-gradient(1px 1px at 40% 60%, #fff, transparent), radial-gradient(1.5px 1.5px at 85% 55%, #fff, transparent);
@@ -21,23 +21,38 @@
   .hi .name{ font-weight:800; font-size:16px; color:var(--gold2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .hi .bal{ font-size:14px; color:#ffbe6b; font-weight:700; }
   .logout{ font-size:12px; color:#cbb8ff; text-decoration:none; border:1px solid rgba(255,215,120,.3); border-radius:999px; padding:6px 12px; flex:0 0 auto; }
-
   h1{ text-align:center; margin:8px 0 16px; font-size:clamp(22px,5.4vw,30px); font-weight:800;
     background:linear-gradient(180deg,#fff6e2,var(--gold) 55%,#ff8c1a);
     -webkit-background-clip:text; background-clip:text; color:transparent; text-shadow:0 0 30px rgba(255,180,80,.25); }
 
-  /* two main tabs: rank + spin */
-  .tabs{ display:flex; gap:12px; margin-bottom:18px; }
-  .tab{ flex:1; text-decoration:none; color:#fff; border-radius:20px; padding:20px 14px; text-align:center;
-    box-shadow:0 10px 26px rgba(0,0,0,.4); transition:transform .12s; position:relative; overflow:hidden; }
+  /* two hero tabs: rank + spin — the stars of the page */
+  .tabs{ display:flex; gap:14px; margin-bottom:22px; }
+  .tab{ flex:1; text-decoration:none; color:#fff; border-radius:22px; padding:24px 14px 20px; text-align:center;
+    box-shadow:0 12px 30px rgba(0,0,0,.45); transition:transform .12s, box-shadow .2s; position:relative; overflow:hidden;
+    display:flex; flex-direction:column; align-items:center; }
   .tab:active{ transform:scale(.96); }
-  .tab .ic{ font-size:40px; display:block; margin-bottom:6px; filter:drop-shadow(0 3px 10px rgba(0,0,0,.4)); }
-  .tab .t{ font-size:17px; font-weight:800; }
-  .tab .s{ font-size:12px; opacity:.85; margin-top:2px; }
-  .tab.rank{ background:linear-gradient(180deg,#3a2470,#241348); border:1.5px solid rgba(255,215,120,.4); }
-  .tab.spin{ background:radial-gradient(circle at 50% 20%, #ffa63d, #ff8c1a 45%, #b5340c); }
-  .tab .badge{ position:absolute; top:8px; right:10px; font-size:11px; font-weight:800; background:#fff; color:#b5340c;
-    padding:2px 8px; border-radius:999px; }
+  /* sweeping shine so both heroes feel alive */
+  .tab::before{ content:''; position:absolute; top:0; left:-60%; width:45%; height:100%; z-index:0;
+    background:linear-gradient(100deg, transparent, rgba(255,255,255,.22), transparent);
+    transform:skewX(-18deg); animation:shine 4.5s ease-in-out infinite; }
+  .tab.spin::before{ animation-delay:1.6s; }
+  @keyframes shine{ 0%,55%{ left:-60% } 80%,100%{ left:130% } }
+  .tab > *{ position:relative; z-index:1; }
+  .tab .ic{ font-size:48px; display:block; margin-bottom:8px; filter:drop-shadow(0 3px 12px rgba(0,0,0,.45)); }
+  .tab.spin .ic{ animation:spinWobble 3s ease-in-out infinite; }
+  @keyframes spinWobble{ 0%,100%{ transform:rotate(-8deg) } 50%{ transform:rotate(8deg) } }
+  .tab .t{ font-size:18px; font-weight:900; line-height:1.15; }
+  .tab .s{ font-size:12.5px; opacity:.9; margin-top:4px; line-height:1.3; }
+  /* both heroes share the same warm gold-orange tone */
+  .tab.rank, .tab.spin{ background:radial-gradient(circle at 50% 15%, #ffc46b, #ff8c1a 42%, #c0400d);
+    border:2px solid rgba(255,240,200,.55); }
+  /* the little "1 lần/ngày" pill under each hero */
+  .tab .once{ margin-top:auto; font-size:11px; font-weight:800; padding:4px 11px; border-radius:999px;
+    display:inline-flex; align-items:center; gap:4px; background:rgba(255,255,255,.9); color:#b5340c; }
+  .tab .s{ margin-bottom:12px; }
+  .tab .badge{ position:absolute; top:10px; right:10px; z-index:2; font-size:11px; font-weight:800; background:#fff; color:#b5340c;
+    padding:3px 9px; border-radius:999px; box-shadow:0 2px 8px rgba(0,0,0,.3); animation:pop 1.4s ease-in-out infinite; }
+  @keyframes pop{ 0%,100%{ transform:scale(1) } 50%{ transform:scale(1.12) } }
 
   .section{ font-size:13px; color:#cbb8ff; font-weight:700; margin:6px 4px 10px; text-transform:uppercase; letter-spacing:.5px; }
   /* 5 game cards */
@@ -52,6 +67,21 @@
   .game.done{ opacity:.6; }
   .game .tick{ position:absolute; top:8px; right:10px; font-size:12px; font-weight:800; color:#9be29b; }
   .game:last-child:nth-child(odd){ grid-column:1 / -1; }   /* 5th card spans full width */
+
+  /* testing toggle */
+  .testbar{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin:18px 2px 4px;
+    padding:12px 14px; border-radius:14px; background:#ffffff0d; border:1px dashed rgba(255,215,120,.3); }
+  .testbar .lbl{ font-size:13px; font-weight:700; color:#cbb8ff; text-align:left; line-height:1.35; }
+  .testbar .lbl b{ color:#ffd166; }
+  .switch{ flex:0 0 auto; position:relative; width:52px; height:30px; border-radius:999px; cursor:pointer;
+    background:#3a2168; border:1.5px solid rgba(255,215,120,.35); transition:background .2s; }
+  .switch::after{ content:''; position:absolute; top:2px; left:2px; width:24px; height:24px; border-radius:50%;
+    background:#cbb8ff; transition:transform .2s, background .2s; }
+  .switch.on{ background:radial-gradient(circle at 50% 30%,#ffa63d,#ff8c1a 60%,#b5340c); border-color:#ffd166; }
+  .switch.on::after{ transform:translateX(22px); background:#fff; }
+  /* lu1edbp phu1ee7 tu1889 nhu1eb9 tru00ean nu1ec1n demo -> chu1eef du1ec5 u0111u1ecdc */
+  body::before{ content:''; position:fixed; inset:0; z-index:0; pointer-events:none;
+    background:linear-gradient(180deg, #0a081e33 0%, #0a081e66 55%, #0a081eaa 100%); }
 </style>
 </head>
 <body>
@@ -70,26 +100,33 @@
     <div class="tabs">
       <a class="tab rank" href="/rank">
         <span class="ic">🏆</span>
-        <div class="t">Bảng xếp hạng</div>
-        <div class="s" id="rankSub">Xem vị trí của bạn</div>
+        <div class="t">Bảng Xếp Hạng</div>
+        <div class="s" id="rankSub">Đèn ai sáng nhất đêm nay? 👀</div>
+        <span class="once">✨ 1 lần/ngày thôi nha</span>
       </a>
       <a class="tab spin" href="/spin">
         <span class="ic">🎡</span>
-        <div class="t">Quay Số May Rủi Như Chờ Lương</div>
-        <div class="s">Quay nhận lửa</div>
+        <div class="t">Vòng Quay May Rủi</div>
+        <div class="s">Quay một phát, lửa đầy tay 🔥</div>
+        <span class="once">🎯 1 lần/ngày thôi nha</span>
         <span class="badge" id="spinBadge" style="display:none">Mới!</span>
       </a>
     </div>
 
     <div class="section">🎮 Mini game — chơi mỗi ngày nhận lửa</div>
     <div class="games" id="games"></div>
+
+    <div class="testbar">
+      <div class="lbl">🧪 <b>Chế độ test</b><br><span id="testHint">Bật: chơi nhiều lần · Tắt: mỗi trò 1 lần/ngày</span></div>
+      <div class="switch" id="testSwitch" role="switch" aria-label="Chế độ test"></div>
+    </div>
   </div>
 
   <script>
     const GAMES = [
       { key:'shake',   href:'/shake',   ic:'🏮', t:'Lắc Đi Cho Hết Căng' },
-      { key:'quiz',    href:'/quiz',    ic:'🥮', t:'Nhân Bánh Là Nhân Viên Nào?' },
-      { key:'puzzle',  href:'/puzzle',  ic:'🥮', t:'Lăn Bánh Né Hố Như Né Họp' },
+      { key:'quiz',    href:'/quiz',    ic:'🥮', t:'Soi Nhân Bánh, Đoán Nhân Viên' },
+      { key:'puzzle',  href:'/puzzle',  ic:'🕳️', t:'Lăn Bánh Né Hố Như Né Họp' },
       { key:'fortune', href:'/fortune', ic:'🔥', t:'Giữ Lửa Như Giữ Job' },
       { key:'catch',   href:'/catch',   ic:'🐰', t:'Chốt Deal Bắt Thỏ' },
     ];
@@ -107,14 +144,39 @@
         if (w.canSpin) document.getElementById('spinBadge').style.display = '';
       }
       renderGames(w || {});
+      initTestToggle();
+    }
+
+    async function initTestToggle(){
+      const sw = document.getElementById('testSwitch');
+      const hint = document.getElementById('testHint');
+      const paint = on=>{
+        sw.classList.toggle('on', on);
+        sw.setAttribute('aria-checked', on ? 'true' : 'false');
+        hint.textContent = on ? 'ĐANG BẬT — chơi lại thoải mái để test 🔁'
+                               : 'ĐANG TẮT — chỉ được chơi 1 mini game/ngày 🌙';
+      };
+      let on = false;
+      try { on = !!(await (await fetch('/api/testing')).json()).testing; } catch(e){}
+      paint(on);
+      sw.onclick = async ()=>{
+        const next = !sw.classList.contains('on');
+        paint(next);                                  // optimistic
+        try {
+          const r = await (await fetch('/api/testing', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ on: next }) })).json();
+          paint(!!r.testing);
+        } catch(e){ paint(!next); }                    // revert on failure
+      };
     }
 
     function renderGames(w){
       const box = document.getElementById('games');
+      const single = w.playedAnyGame === true;   // testing OFF + already played one
       box.innerHTML = GAMES.map(g=>{
-        const done = w[canKey[g.key]] === false;   // already played today
-        return `<a class="game ${done?'done':''}" href="${g.href}">
-          ${done?'<span class="tick">✓ hôm nay</span>':''}
+        const locked = w[canKey[g.key]] === false;
+        const tick = locked ? (single ? '<span class="tick">🔒 mai nhé</span>' : '<span class="tick">✓ hôm nay</span>') : '';
+        return `<a class="game ${locked?'done':''}" href="${locked?'#':g.href}"${locked?' onclick="return false"':''}>
+          ${tick}
           <span class="ic">${g.ic}</span>
           <div class="t">${g.t}</div>
         </a>`;

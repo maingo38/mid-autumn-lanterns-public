@@ -8,7 +8,7 @@
   :root{ --gold:#ffd77a; --gold2:#ffe9b0; --deep:#0a0620; }
   *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-user-select:none; user-select:none; }
   body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-    color:#fff; background:radial-gradient(130% 100% at 50% -10%, #2a1a5e 0%, var(--deep) 58%, #05030f 100%);
+    color:#fff; background:#0d0a26 url('/decor/Background.jpeg') center top / cover no-repeat fixed;
     min-height:100vh; overflow:hidden; text-align:center; display:flex; flex-direction:column; align-items:center; }
   h1{ margin:18px 16px 2px; font-size:clamp(22px,5.4vw,32px); font-weight:800; position:relative; z-index:3;
     background:linear-gradient(180deg,#fff6e2,var(--gold) 55%,#ff8c1a);
@@ -45,11 +45,32 @@
     border:1px solid rgba(255,215,120,.3); border-radius:999px; padding:9px 20px; }
   .confetti{ position:fixed; top:-10px; font-size:22px; z-index:60; pointer-events:none; animation:fall linear forwards; }
   @keyframes fall{ to{ transform:translateY(110vh) rotate(360deg); opacity:0; } }
+
+  /* combo counter — grows and glows as the streak climbs */
+  .combo{ position:relative; z-index:3; min-height:30px; font-size:22px; font-weight:900;
+    color:#ffd166; text-shadow:0 0 16px #ff8c1a; opacity:0; transition:opacity .15s, transform .1s; }
+  .combo.show{ opacity:1; }
+  .combo.hot{ color:#ff5722; text-shadow:0 0 20px #ff5722,0 0 40px #ffd166; }
+  /* embers flung from the oven when combo is high */
+  .ember{ position:fixed; z-index:55; pointer-events:none; font-size:22px; will-change:transform,opacity;
+    animation:emberFly .9s ease-out forwards; }
+  @keyframes emberFly{ to{ transform:translate(var(--dx),var(--dy)) rotate(var(--rot)) scale(.4); opacity:0; } }
+  /* wind warning + flash */
+  .windWarn{ position:fixed; top:22%; left:50%; transform:translateX(-50%) translateY(-10px); z-index:58;
+    font-size:24px; font-weight:900; color:#8fd3ff; text-shadow:0 0 16px #4aa3ff; opacity:0; pointer-events:none;
+    white-space:nowrap; }
+  .windWarn.show{ animation:windIn 1.4s ease; }
+  @keyframes windIn{ 0%{opacity:0;transform:translateX(-50%) translateY(-10px)} 20%,70%{opacity:1;transform:translateX(-50%) translateY(0)} 100%{opacity:0} }
+  body.gust{ animation:gustShake .4s ease; }
+  @keyframes gustShake{ 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+  /* lu1edbp phu1ee7 tu1889 nhu1eb9 tru00ean nu1ec1n demo -> chu1eef du1ec5 u0111u1ecdc */
+  body::before{ content:''; position:fixed; inset:0; z-index:0; pointer-events:none;
+    background:linear-gradient(180deg, #0a081e33 0%, #0a081e66 55%, #0a081eaa 100%); }
 </style>
 </head>
 <body>
   <h1>🔥 Giữ Lửa Như Giữ Job</h1>
-  <div class="sub">Nhấn liên tục để <b>quạt lò than</b>, giữ nhiệt trong vùng vàng suốt 10 giây. Giữ càng chuẩn, bánh càng ngon — càng nhiều lửa!</div>
+  <div class="sub">Nhấn liên tục để <b>quạt lò than</b>, giữ kim nhiệt trong vùng vàng. Giữ chuẩn liên tục để lên <b style="color:#ff8c1a">COMBO</b> ăn điểm x2! Coi chừng <b style="color:#8fd3ff">cơn gió 🌬️</b> thổi nguội lò. ≥80% = 4🔥, 50-79% = 3🔥, &lt;50% = 2🔥</div>
   <div class="hud">
     <div class="box">⏱️ <span id="time">10</span>s</div>
     <div class="box">🔥 độ chín <span id="cook">0</span>%</div>
@@ -64,6 +85,7 @@
     <div class="oven">🏮<div class="cake" id="cake">🥮</div><div class="flames" id="flames">🔥</div></div>
   </div>
   <div class="zonelbl" id="zonelbl"></div>
+  <div class="combo" id="combo"></div>
 
   <button class="fan" id="fan">Bắt đầu nướng!</button>
   <div class="result" id="result"></div>
@@ -80,6 +102,7 @@
     const zonelbl = document.getElementById('zonelbl');
     const cake = document.getElementById('cake');
     const flames = document.getElementById('flames');
+    const comboEl = document.getElementById('combo');
 
     const DURATION = 10000;      // ms
     let playedToday = false, running = false, started = false;
@@ -87,6 +110,31 @@
     let inZoneMs = 0, totalMs = 0, lastT = 0, rafId = 0, endAt = 0;
     // moving target band (centre + half-width, in 0..100 units)
     let zoneCenter = 55, zoneHalf = 14, zoneDir = 1;
+    // fun layer: combo streak, bonus points, surprise wind gusts
+    let comboMs = 0;             // how long continuously in-zone (ms)
+    let bonus = 0;               // extra score points earned from combos
+    let emberBudget = 0;
+    let nextGustAt = 0, gustUntil = 0;
+
+    function buzz(ms){ if (navigator.vibrate){ try{ navigator.vibrate(ms); }catch(e){} } }
+    function comboMult(){ return comboMs > 3000 ? 3 : comboMs > 1500 ? 2 : 1; }
+    function ember(){
+      if (emberBudget <= 0) return; emberBudget--;
+      const e = document.createElement('div'); e.className='ember'; e.textContent = Math.random()<0.5?'🔥':'✨';
+      const r = cake.getBoundingClientRect();
+      e.style.left = (r.left + r.width/2 - 11) + 'px';
+      e.style.top  = (r.top + r.height/2 - 11) + 'px';
+      const ang = -Math.PI/2 + (Math.random()*1.4-0.7), dist = 70 + Math.random()*90;
+      e.style.setProperty('--dx', Math.cos(ang)*dist + 'px');
+      e.style.setProperty('--dy', (Math.sin(ang)*dist) + 'px');
+      e.style.setProperty('--rot', (Math.random()*360-180)+'deg');
+      document.body.appendChild(e); setTimeout(()=>e.remove(), 900);
+    }
+    let windEl = null;
+    function windWarn(){
+      if (!windEl){ windEl=document.createElement('div'); windEl.className='windWarn'; windEl.textContent='🌬️ Gió tới! Giữ chặt lò!'; document.body.appendChild(windEl); }
+      windEl.classList.remove('show'); void windEl.offsetWidth; windEl.classList.add('show');
+    }
 
     async function loadWallet(){
       const r = await (await fetch('/api/wallet')).json();
@@ -112,31 +160,63 @@
       if (running || playedToday) return;
       started = true; running = true;
       heat = 30; inZoneMs = 0; totalMs = 0;
+      comboMs = 0; bonus = 0; emberBudget = 0;
+      zoneCenter = 55; zoneHalf = 14; zoneDir = 1;
       fanBtn.textContent = '💨 QUẠT! (nhấn liên tục)';
       resultEl.textContent = '';
       lastT = performance.now(); endAt = lastT + DURATION;
+      nextGustAt = lastT + 2600 + Math.random()*1200;   // first surprise gust
+      gustUntil = 0;
       rafId = requestAnimationFrame(loop);
     }
 
     function loop(t){
       const dt = t - lastT; lastT = t;
-      // heat naturally cools over time; fanning (taps) pushes it back up
-      heat = Math.max(0, heat - dt * 0.012);   // ~12/sec cooling
-      // drift the target band so it's not static (gentle bounce)
-      zoneCenter += zoneDir * dt * 0.004;
+      const elapsed = DURATION - (endAt - t);
+      const prog = Math.max(0, Math.min(1, elapsed / DURATION));   // 0..1 over the round
+
+      // difficulty ramps: band narrows and drifts faster as the bake goes on
+      zoneHalf = 14 - prog * 6;                 // 14 -> 8 (tighter window)
+      const drift = 0.004 + prog * 0.004;       // drifts faster later
+
+      // surprise wind gust: warns, then blows the coals cold for ~700ms
+      if (t >= nextGustAt && running){
+        gustUntil = t + 700; windWarn(); buzz([20,40,20]);
+        document.body.classList.add('gust'); setTimeout(()=>document.body.classList.remove('gust'), 400);
+        nextGustAt = t + 2800 + Math.random()*1600;
+      }
+      const gusting = t < gustUntil;
+      const cool = gusting ? 0.045 : 0.012;     // gust cools ~4x faster
+      heat = Math.max(0, heat - dt * cool);
+
+      zoneCenter += zoneDir * dt * drift;
       if (zoneCenter > 72){ zoneCenter = 72; zoneDir = -1; }
       if (zoneCenter < 34){ zoneCenter = 34; zoneDir = 1; }
       drawBand(); setNeedle();
 
       const lo = zoneCenter - zoneHalf, hi = zoneCenter + zoneHalf;
       const inZone = heat >= lo && heat <= hi;
-      totalMs += dt; if (inZone) inZoneMs += dt;
-      // feedback: cake browns as cook% rises; flames react to heat
-      const cook = Math.round(inZoneMs / DURATION * 100);
+      totalMs += dt;
+      if (inZone){
+        inZoneMs += dt; comboMs += dt;
+        bonus += dt / DURATION * 100 * (comboMult() - 1);   // combo adds extra score
+        emberBudget = Math.min(3, emberBudget + dt*0.01);
+        if (comboMult() >= 2 && Math.random() < 0.4) ember();
+      } else {
+        if (comboMs > 1500) buzz(15);            // little nudge when a big combo breaks
+        comboMs = 0;
+      }
+
+      // combo label
+      const mult = comboMult();
+      if (mult > 1){ comboEl.textContent = `🔥 COMBO x${mult}`; comboEl.classList.add('show'); comboEl.classList.toggle('hot', mult>=3); }
+      else { comboEl.classList.remove('show','hot'); }
+
+      const cook = Math.round((inZoneMs / DURATION * 100) + bonus);
       cookEl.textContent = Math.min(100, cook);
       cake.textContent = inZone ? '🥮' : (heat > hi ? '🔥' : '🥮');
-      flames.textContent = heat > 75 ? '🔥🔥🔥' : heat > 40 ? '🔥🔥' : '🔥';
-      zonelbl.textContent = inZone ? '👌 Nhiệt chuẩn! Giữ đều tay!' : (heat > hi ? '🥵 Nóng quá, ngừng quạt!' : '🥶 Nguội rồi, quạt lên!');
+      flames.textContent = gusting ? '🌬️' : heat > 75 ? '🔥🔥🔥' : heat > 40 ? '🔥🔥' : '🔥';
+      zonelbl.textContent = gusting ? '🌬️ Gió thổi! Quạt bù nhanh!' : inZone ? '👌 Nhiệt chuẩn! Giữ đều tay!' : (heat > hi ? '🥵 Nóng quá, ngừng quạt!' : '🥶 Nguội rồi, quạt lên!');
 
       const left = Math.max(0, endAt - t);
       timeEl.textContent = Math.ceil(left/1000);
@@ -146,16 +226,21 @@
 
     async function finish(){
       running = false; cancelAnimationFrame(rafId);
-      zonelbl.textContent = '';
-      const score = Math.max(0, Math.min(100, Math.round(inZoneMs / DURATION * 100)));
-      cake.textContent = score >= 70 ? '🥮' : score >= 40 ? '🥮' : '🍪';
+      zonelbl.textContent = ''; comboEl.classList.remove('show','hot');
+      // score = time-in-zone + combo bonus, capped at 100
+      const score = Math.max(0, Math.min(100, Math.round(inZoneMs / DURATION * 100 + bonus)));
+      const tier = score >= 80 ? '≥80%' : score >= 50 ? '50–79%' : '<50%';
+      cake.textContent = score >= 40 ? '🥮' : '🍪';
       try {
         const resp = await fetch('/api/fortune/win', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ score }) });
         if (resp.status === 401){ location.href = '/'; return; }
         const r = await resp.json();
         const grade = score >= 80 ? 'Bánh tuyệt hảo! 🌟' : score >= 55 ? 'Bánh ngon lắm! 😋' : score >= 30 ? 'Bánh tạm ổn 🙂' : 'Bánh hơi cháy 😅';
-        if (resp.ok){ resultEl.textContent = `${grade} Độ chín ${score}% → +${r.reward} lửa 🔥`; balEl.textContent = r.wallet.balance; confetti(); paintDone(); showCheer({delay:1000}); }
-        else { resultEl.textContent = 'Bạn đã nướng hôm nay rồi 🌙'; if(r.wallet) balEl.textContent = r.wallet.balance; paintDone(); showCheer({delay:800}); }
+        if (resp.ok){
+          resultEl.innerHTML = `${grade}<br>Độ chín <b>${score}%</b> <span style="font-size:15px;color:#cbb8ff">· mốc ${tier} →</span> <b style="color:#ffd166">${r.reward} lửa 🔥</b>`;
+          balEl.textContent = r.wallet.balance; confetti(); buzz([40,30,80]); paintDone(); showCheer({delay:1400});
+        }
+        else { resultEl.innerHTML = `Hôm nay bạn nướng được <b>${score}%</b> rồi 🌙<br><span style="font-size:15px;color:#cbb8ff">(chơi lại cho vui thôi nhé)</span>`; if(r.wallet) balEl.textContent = r.wallet.balance; paintDone(); showCheer({delay:800}); }
       } catch(e){ resultEl.textContent = 'Lỗi kết nối, thử lại nhé!'; started=false; fanBtn.textContent='Bắt đầu nướng!'; }
     }
     function paintDone(){ playedToday = true; fanBtn.disabled = true; fanBtn.textContent = 'Đã nướng hôm nay 🌙'; }
