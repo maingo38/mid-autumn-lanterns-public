@@ -33,4 +33,18 @@ function client(base, cookie) {
   };
 }
 
-module.exports = { guest, client };
+// Log in as admin (ADMIN_KEY defaults to 'trungthu2026') and return the cookie.
+async function admin(base, key = 'trungthu2026') {
+  const r = await fetch(base + '/api/admin/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ key }),
+  });
+  if (!r.ok) throw new Error('admin login failed: ' + r.status);
+  const setCookie = r.headers.get('set-cookie') || '';
+  const m = setCookie.match(/ml_admin=([^;]+)/);
+  if (!m) throw new Error('no ml_admin cookie returned');
+  return { cookie: 'ml_admin=' + m[1] };
+}
+
+module.exports = { guest, admin, client };
