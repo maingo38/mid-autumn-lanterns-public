@@ -4,7 +4,8 @@
   "description": "Kids color a lantern on their phone; it flies onto the big screen (teamLab Sketch-Aquarium style)",
   "type": "commonjs",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test 'test/**/*.test.js'"
   },
   "dependencies": {
     "better-sqlite3": "^11.3.0",
