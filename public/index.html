@@ -115,11 +115,20 @@
 
   /* ---------- COLOURING ---------- */
   #colour { background:transparent; }
-  header { padding:7px 12px; font-weight:800; font-size:15px; color:#ffe9b0;
+  header { padding:10px 14px calc(6px + 0px); color:#ffe9b0;
            background:rgba(10,8,26,.45); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); letter-spacing:.3px;
-           box-shadow:0 2px 10px #0006; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+           box-shadow:0 2px 10px #0006; display:flex; flex-direction:column; gap:6px; }
+  header .hdrRow { display:flex; align-items:center; justify-content:space-between; }
+  header .hdrTitle { width:100%; text-align:center; font-size:21px; font-weight:900; letter-spacing:.5px;
+    background:linear-gradient(90deg,#ffe9b0,#ffd166,#ff8c1a); -webkit-background-clip:text; background-clip:text;
+    -webkit-text-fill-color:transparent; color:transparent;
+    filter:drop-shadow(0 0 10px #ffcf6a66) drop-shadow(0 0 20px #ff8c1a44);
+    animation:titleGlow 3s ease-in-out infinite; }
+  @keyframes titleGlow{ 0%,100%{ filter:drop-shadow(0 0 8px #ffcf6a55) drop-shadow(0 0 16px #ff8c1a33) }
+    50%{ filter:drop-shadow(0 0 14px #ffcf6a99) drop-shadow(0 0 28px #ff8c1a66) } }
+  @media (prefers-reduced-motion: reduce){ header .hdrTitle{ animation:none } }
   #backToPick { background:#ffffff1a; color:#ffe9b0; border:1px solid #ffffff33; border-radius:10px;
-                padding:8px 12px; font-size:14px; font-weight:800; width:78px; }
+                padding:8px 14px; font-size:14px; font-weight:800; }
   .hdrMenu { position:relative; flex:0 0 auto; }
   .hdrLogo { width:34px; height:34px; padding:0; cursor:pointer; display:flex; align-items:center; justify-content:center;
              font-size:19px; border-radius:50%; background:radial-gradient(circle at 40% 35%, #3a2168, #1a0f36);
@@ -156,18 +165,29 @@
   #paint { background:#fffdf7; box-shadow:inset 0 0 0 2px #ffffff; }
 
   /* toolbar: brush size + undo */
-  #toolbar { display:flex; gap:7px; padding:7px 14px 0; background:rgba(10,8,26,.4); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); justify-content:center; }
-  .tool { width:50px; height:44px; border:1.5px solid #ffffff1f; border-radius:12px; background:#0f0824;
-          font-size:22px; transition:transform .1s, border-color .12s, background .12s; }
-  .tool.active { border-color:#ffd166; background:#3a2168; box-shadow:0 0 0 3px #ffd16633; transform:translateY(-2px); }
+  #toolbar { display:flex; align-items:center; gap:10px; padding:10px 14px;
+             background:rgba(10,8,26,.45); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
+             justify-content:center; flex-wrap:wrap; }
+  /* mỗi nhóm công cụ trong 1 'đảo' bo tròn -> gọn, cân hàng */
+  .toolGroup { display:flex; align-items:center; gap:6px; padding:5px; border-radius:16px;
+               background:rgba(255,255,255,.05); border:1px solid #ffffff14; }
+  .tool { width:52px; height:52px; border:1.5px solid #ffffff26; border-radius:16px; background:rgba(20,14,40,.6);
+          font-size:26px; display:flex; align-items:center; justify-content:center; flex:0 0 auto;
+          transition:transform .1s, border-color .12s, background .12s, box-shadow .12s; }
+  .tool.active { border-color:#ffd166; background:linear-gradient(180deg,#4a2f7a,#3a2168);
+                 box-shadow:0 0 0 3px #ffd16644, 0 4px 12px #0005; transform:translateY(-2px); }
   .tool:active { transform:scale(0.92); }
-  #tools { display:flex; align-items:center; gap:12px; padding:6px 14px; background:rgba(10,8,26,.4); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); }
-  #tools .dot { width:var(--sz,16px); height:var(--sz,16px); border-radius:50%; background:#ffd166;
-                box-shadow:0 0 10px #ffd16688; flex:0 0 auto; transition:all .1s; }
-  #size { flex:1; accent-color:#ff8c1a; height:28px; }
-  .iconbtn { width:46px; height:46px; border:0; border-radius:12px; background:#3a2168; color:#fff;
-             font-size:20px; flex:0 0 auto; box-shadow:0 2px 8px #0004; transition:transform .1s; }
+  /* 3 nút cỡ nét: chấm tròn to dần */
+  .szBtn { width:46px; height:46px; border:1.5px solid #ffffff26; border-radius:14px; background:rgba(20,14,40,.6);
+           display:flex; align-items:center; justify-content:center; flex:0 0 auto; transition:transform .1s, border-color .12s, box-shadow .12s; }
+  .szBtn i { display:block; border-radius:50%; background:#ffe9b0; box-shadow:0 0 8px #ffd16688; }
+  .szBtn.active { border-color:#ffd166; box-shadow:0 0 0 3px #ffd16644; }
+  .szBtn.active i { background:#ffd166; }
+  .szBtn:active { transform:scale(0.9); }
+  .iconbtn { width:48px; height:48px; border:0; border-radius:14px; background:rgba(20,14,40,.6); color:#fff;
+             border:1.5px solid #ffffff26; font-size:20px; flex:0 0 auto; box-shadow:0 2px 8px #0004; transition:transform .1s; }
   .iconbtn:active { transform:scale(0.9); }
+  .iconbtn:disabled { opacity:.35; }
 
   /* palette — 1 hàng cuộn NGANG, dễ chọn trên điện thoại */
   #palette { display:flex; flex-wrap:nowrap; gap:10px; padding:10px 14px calc(6px + env(safe-area-inset-bottom));
@@ -453,16 +473,18 @@
 <!-- ========== 2. COLOURING ========== -->
 <div class="scene" id="colour">
   <header>
-    <button id="backToPick" title="Đổi mẫu">‹ Đổi mẫu</button>
-    <span>🏮 Vẽ lồng đèn của bạn</span>
-    <div class="hdrMenu">
-      <button class="hdrLogo" title="Menu" aria-haspopup="true" aria-expanded="false">🐰<span class="hdrCaret">▾</span></button>
-      <div class="hdrDrop" role="menu">
-        <button type="button" data-nav="mine">🏠 Trang chính</button>
-        <button type="button" data-nav="/hub">🎮 Trò chơi</button>
-        <button type="button" data-nav="/rank">📊 Bảng xếp hạng</button>
+    <div class="hdrRow">
+      <button id="backToPick" title="Đổi mẫu">‹ Đổi mẫu</button>
+      <div class="hdrMenu">
+        <button class="hdrLogo" title="Menu" aria-haspopup="true" aria-expanded="false">🐰<span class="hdrCaret">▾</span></button>
+        <div class="hdrDrop" role="menu">
+          <button type="button" data-nav="mine">🏠 Trang chính</button>
+          <button type="button" data-nav="/hub">🎮 Trò chơi</button>
+          <button type="button" data-nav="/rank">📊 Bảng xếp hạng</button>
+        </div>
       </div>
     </div>
+    <span class="hdrTitle">Vẽ lồng đèn của bạn</span>
   </header>
   <div id="stage">
     <div id="wrap">
@@ -476,18 +498,20 @@
     </div>
   </div>
   <div id="toolbar">
-    <button class="tool active" data-tool="brush"   title="Bút vẽ">🖌️</button>
-    <button class="tool"        data-tool="glow"    title="Bút phát sáng">🌟</button>
-    <button class="tool"        data-tool="glitter" title="Bút nhũ">✨</button>
-    <button class="tool"        data-tool="fill"    title="Đổ màu">🪣</button>
-    <button class="tool"        data-tool="eraser"  title="Tẩy">🧽</button>
-    <button class="tool"        data-tool="hand"    title="Di chuyển hình">✋</button>
-  </div>
-  <div id="tools">
-    <span class="dot" id="sizeDot"></span>
-    <input id="size" type="range" min="6" max="48" value="18">
-    <button class="iconbtn" id="undo" title="Hoàn tác">↩️</button>
-    <button class="iconbtn" id="redo" title="Làm lại">↪️</button>
+    <div class="toolGroup">
+      <button class="tool active" data-tool="brush"  title="Cọ vẽ">🖌️</button>
+      <button class="tool"        data-tool="fill"   title="Đổ màu">🪣</button>
+      <button class="tool"        data-tool="eraser" title="Tẩy">🧽</button>
+    </div>
+    <div class="toolGroup">
+      <button class="szBtn" data-size="8"  title="Nhỏ"><i style="width:8px;height:8px"></i></button>
+      <button class="szBtn active" data-size="18" title="Vừa"><i style="width:16px;height:16px"></i></button>
+      <button class="szBtn" data-size="34" title="Lớn"><i style="width:26px;height:26px"></i></button>
+    </div>
+    <div class="toolGroup">
+      <button class="iconbtn" id="undo" title="Hoàn tác">↩️</button>
+      <button class="iconbtn" id="redo" title="Làm lại">↪️</button>
+    </div>
   </div>
   <div id="palette"></div>
   <div class="controls">
@@ -538,8 +562,8 @@
   </div>
 
   <div id="wishField">
-    <textarea id="wishText" maxlength="140" placeholder="Điều ước của bé là gì? Ví dụ: con mong cả nhà luôn khoẻ mạnh 🌟"></textarea>
-    <div id="wishCount">0/140</div>
+    <textarea id="wishText" maxlength="40" placeholder="Điều ước của bé là gì? Ví dụ: con mong cả nhà luôn khoẻ mạnh 🌟"></textarea>
+    <div id="wishCount">0/40</div>
   </div>
 
   <div class="pvbtns">
@@ -692,9 +716,9 @@ function saveDraft(){
 function loadDraft(){
   let d; try{ d = JSON.parse(localStorage.getItem(draftKey(template))||'null'); }catch(e){ d=null; }
   if(!d || !d.paint) { refreshUndoRedo(); return; }
-  if(d.tool){ tool=d.tool; document.querySelectorAll('.tool').forEach(b=>b.classList.toggle('active', b.dataset.tool===tool)); }
+  if(d.tool && d.tool!=='glow' && d.tool!=='glitter' && d.tool!=='hand'){ tool=d.tool; document.querySelectorAll('.tool').forEach(b=>b.classList.toggle('active', b.dataset.tool===tool)); }
   if(d.color){ color=d.color; document.querySelectorAll('.sw').forEach(s=>s.classList.toggle('active', s.style.background===d.color || rgbEq(s.style.background,d.color))); }
-  if(d.size){ sizeEl.value=d.size; }
+  if(d.size){ size = [8,18,34].includes(+d.size) ? +d.size : 18; }
   syncSize();
   const im=new Image();
   im.onload=()=>{ pctx.clearRect(0,0,paint.width,paint.height); pctx.drawImage(im,0,0,paint.width,paint.height); };
@@ -983,7 +1007,7 @@ const COLORS = [
   '#607d8b','#455a64','#263238'
 ];
 let color = COLORS[0], size = 18, drawing = false;
-let tool = 'brush';          // brush | glow | glitter | eraser | fill
+let tool = 'brush';          // brush | fill | eraser
 const undoStack = [];
 const redoStack = [];        // song song undo: làm lại thao tác vừa hoàn tác
 function refreshUndoRedo(){
@@ -999,13 +1023,16 @@ const pal = document.getElementById('palette');
 COLORS.forEach((c,i) => {
   const b = document.createElement('div');
   b.className = 'sw' + (i===0?' active':''); b.style.background = c;
-  b.onclick = () => { color=c; document.querySelectorAll('.sw').forEach(s=>s.classList.remove('active')); b.classList.add('active'); syncSize(); saveDraft(); };
+  b.onclick = () => { color=c; document.querySelectorAll('.sw').forEach(s=>s.classList.remove('active')); b.classList.add('active'); saveDraft(); };
   pal.appendChild(b);
 });
-const sizeEl = document.getElementById('size');
-const sizeDot = document.getElementById('sizeDot');
-function syncSize(){ size = +sizeEl.value; sizeDot.style.setProperty('--sz', size+'px'); sizeDot.style.background = color; }
-sizeEl.oninput = () => { syncSize(); saveDraft(); };
+// 3 nút cỡ nét (dùng chung cọ + tẩy)
+function syncSize(){
+  document.querySelectorAll('.szBtn').forEach(b => b.classList.toggle('active', +b.dataset.size === size));
+}
+document.querySelectorAll('.szBtn').forEach(b => {
+  b.onclick = () => { size = +b.dataset.size; syncSize(); saveDraft(); };
+});
 
 const maskImg = new Image();
 const lineImg = new Image();
@@ -1057,30 +1084,12 @@ function applyToolStyle(){
   pctx.globalCompositeOperation = (tool === 'eraser') ? 'destination-out' : 'source-over';
   pctx.shadowBlur = 0; pctx.globalAlpha = 1;
   pctx.strokeStyle = pctx.fillStyle = color;
-  if (tool === 'glow'){                 // soft luminous halo
-    pctx.shadowColor = color; pctx.shadowBlur = size * 0.9;
-  }
 }
 // draw a continuous stroke between two points (no gaps when moving fast)
 function strokeSeg(x0,y0,x1,y1){
   applyToolStyle();
   pctx.lineWidth = size;
   pctx.beginPath(); pctx.moveTo(x0,y0); pctx.lineTo(x1,y1); pctx.stroke();
-  if (tool === 'glitter') sprinkle((x0+x1)/2,(y0+y1)/2);
-}
-// scatter little sparkle dots around a point (glitter pen)
-function sprinkle(x,y){
-  pctx.save(); pctx.globalCompositeOperation='source-over'; pctx.shadowBlur=0;
-  const n = 4 + (Math.random()*4|0);
-  for(let i=0;i<n;i++){
-    const a=Math.random()*Math.PI*2, r=Math.random()*size*0.9;
-    const gx=x+Math.cos(a)*r, gy=y+Math.sin(a)*r;
-    if(!insideMask(gx,gy)) continue;
-    pctx.fillStyle = Math.random()<0.5 ? color : '#fff';
-    pctx.globalAlpha = 0.5+Math.random()*0.5;
-    pctx.beginPath(); pctx.arc(gx,gy,1+Math.random()*2,0,Math.PI*2); pctx.fill();
-  }
-  pctx.restore();
 }
 // fill the whole lantern area with the current colour (fast: paint on a temp
 // canvas, clip it to the mask shape, then composite under the existing art)
@@ -1091,31 +1100,34 @@ function fillArea(sx, sy){
   sx=Math.floor(sx); sy=Math.floor(sy);
   if(!insideMask(sx,sy)) return;
   const img = pctx.getImageData(0,0,W,H), d = img.data;
-  // line-art pixels act as walls
-  const ld = lctx.getImageData(0,0,W,H).data;
+  const ld = lctx.getImageData(0,0,W,H).data;   // line-art = tường chặn
+  const md = maskData;                          // mask alpha = biên hình
   const rgb = hexToRgb(color);
   const at = (x,y)=>(y*W+x)*4;
   const start = at(sx,sy);
   const sr=d[start],sg=d[start+1],sb=d[start+2],sa=d[start+3];
-  const match = (i)=>{
-    if(Math.abs(d[i]-sr)+Math.abs(d[i+1]-sg)+Math.abs(d[i+2]-sb)+Math.abs(d[i+3]-sa) > 60) return false;
-    return true;
-  };
-  const wall = (x,y)=>{
-    if(!insideMask(x,y)) return true;             // outside shape
-    return ld[at(x,y)+3] > 40;                     // an outline stroke = boundary
+  const TOL = 100;                              // dung sai cao hơn -> ít sót viền
+  const paintable = (x,y)=>{
+    if(x<0||y<0||x>=W||y>=H) return false;
+    const i=at(x,y);
+    if(md && md[i+3] <= 20) return false;        // ngoài silhouette
+    if(ld[i+3] > 40) return false;               // nét line-art = biên
+    return Math.abs(d[i]-sr)+Math.abs(d[i+1]-sg)+Math.abs(d[i+2]-sb)+Math.abs(d[i+3]-sa) <= TOL;
   };
   const seen = new Uint8Array(W*H);
+  // scanline flood fill: quét cả hàng ngang mỗi lần -> nhanh hơn 4-hướng
   const stack=[[sx,sy]];
   while(stack.length){
-    const [x,y]=stack.pop(); const p=y*W+x;
-    if(seen[p]) continue; seen[p]=1;
-    if(wall(x,y)) continue;
-    const i=at(x,y);
-    if(!match(i)) continue;
-    d[i]=rgb.r; d[i+1]=rgb.g; d[i+2]=rgb.b; d[i+3]=255;
-    if(x>0)stack.push([x-1,y]); if(x<W-1)stack.push([x+1,y]);
-    if(y>0)stack.push([x,y-1]); if(y<H-1)stack.push([x,y+1]);
+    const [px,py]=stack.pop();
+    if(seen[py*W+px] || !paintable(px,py)) continue;
+    let xl=px; while(paintable(xl-1,py)) xl--;
+    let xr=px; while(paintable(xr+1,py)) xr++;
+    for(let x=xl; x<=xr; x++){
+      const p=py*W+x; seen[p]=1;
+      const i=at(x,py); d[i]=rgb.r; d[i+1]=rgb.g; d[i+2]=rgb.b; d[i+3]=255;
+      if(py>0   && !seen[p-W] && paintable(x,py-1)) stack.push([x,py-1]);
+      if(py<H-1 && !seen[p+W] && paintable(x,py+1)) stack.push([x,py+1]);
+    }
   }
   pctx.putImageData(img,0,0);
 }
@@ -1142,10 +1154,6 @@ let pts = [];
 let snapshot = null;    // canvas state at stroke start
 
 function pDown(e){
-  if (tool === 'hand'){          // bàn tay: kéo để di chuyển hình, không vẽ
-    handPan={ x:e.clientX, y:e.clientY, panX, panY };
-    lines.setPointerCapture?.(e.pointerId); e.preventDefault(); return;
-  }
   pushUndo();
   const p=pos(e);
   if (tool === 'fill'){          // bucket: one tap floods from that point
@@ -1158,19 +1166,24 @@ function pDown(e){
   e.preventDefault();
 }
 function pMove(e){
-  if (tool === 'hand' && handPan){    // di chuyển hình theo ngón tay
-    panX = handPan.panX + (e.clientX-handPan.x);
-    panY = handPan.panY + (e.clientY-handPan.y);
-    clampPan(); applyTransform(); e.preventDefault(); return;
-  }
   if(!drawing) return;
   const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
-  for(const ev of evs) pts.push(pos(ev));
+  for(const ev of evs){
+    const p = pos(ev), last = pts[pts.length-1];
+    // kéo nhanh -> chèn điểm giữa để nét không gãy khúc
+    if(last){
+      const dx=p.x-last.x, dy=p.y-last.y, dist=Math.hypot(dx,dy), step=size*0.5||6;
+      if(dist > step){
+        const k=Math.min(8, Math.floor(dist/step));
+        for(let i=1;i<k;i++) pts.push({ x:last.x+dx*i/k, y:last.y+dy*i/k });
+      }
+    }
+    pts.push(p);
+  }
   redrawStroke();
   e.preventDefault();
 }
 function pUp(e){
-  if (tool === 'hand'){ handPan=null; e.preventDefault?.(); return; }
   if(!drawing) return;
   drawing=false;
   clipToMask();          // trim anything painted outside the lantern shape
@@ -1181,8 +1194,7 @@ function pUp(e){
 
 // redraw the whole current stroke in one continuous path
 function redrawStroke(){
-  // glitter accumulates sparkles, so don't wipe previous frames for it
-  if(snapshot && tool!=='glitter') pctx.putImageData(snapshot,0,0);
+  if(snapshot) pctx.putImageData(snapshot,0,0);
   applyToolStyle();
   pctx.lineWidth=size;
   const n=pts.length;
@@ -1198,7 +1210,6 @@ function redrawStroke(){
     pctx.lineTo(pts[n-1].x,pts[n-1].y);
     pctx.stroke();
   }
-  if (tool==='glitter'){ const p=pts[n-1]; sprinkle(p.x,p.y); }
 }
 
 // keep only what's inside the lantern silhouette
@@ -1438,9 +1449,9 @@ const wishCount = document.getElementById('wishCount');
 function startWish(){
   document.getElementById('wishLead').textContent =
     WISH_LEADS[Math.floor(Math.random()*WISH_LEADS.length)];
-  wishText.value=''; wishCount.textContent='0/140';
+  wishText.value=''; wishCount.textContent='0/40';
 }
-wishText.oninput = () => { wishCount.textContent = wishText.value.length + '/140'; };
+wishText.oninput = () => { wishCount.textContent = wishText.value.length + '/40'; };
 
 async function sendWish(wish){
   try {
