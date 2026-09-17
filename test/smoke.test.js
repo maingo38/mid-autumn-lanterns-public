@@ -26,8 +26,8 @@ test('smoke: guest login + seeded lantern shows in height state', async () => {
   assert.equal(r.status, 200);
   assert.equal(r.data.hasLantern, true);
   assert.equal(r.data.firePerFan, 3);
-  // 2 free (release+daily, has approved lantern) + floor(9/3)=3 => 5
-  assert.equal(r.data.freePlays, 2);
-  assert.equal(r.data.playsLeft, 5);
+  // 1 free (release, has approved lantern) + floor(9/3)=3 => 4
+  assert.equal(r.data.freePlays, 1);
+  assert.equal(r.data.playsLeft, 4);
   assert.equal(r.data.balance, 9);
 });

@@ -180,11 +180,30 @@
       let on = false;
       try { on = !!(await (await fetch('/api/testing')).json()).testing; } catch(e){}
       paint(on);
+      // POST /api/testing yêu cầu quyền admin (chống người ngoài bật farm lửa).
+      // Nếu chưa đăng nhập admin -> hỏi mã 1 lần rồi thử lại.
+      async function postTesting(next){
+        return fetch('/api/testing', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ on: next }) });
+      }
+      async function ensureAdmin(){
+        const key = prompt('Nhập mã quản trị để bật/tắt chế độ test:');
+        if (!key) return false;
+        try {
+          const r = await fetch('/api/admin/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ key }) });
+          return r.ok;
+        } catch(e){ return false; }
+      }
       sw.onclick = async ()=>{
         const next = !sw.classList.contains('on');
         paint(next);                                  // optimistic
         try {
-          const r = await (await fetch('/api/testing', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ on: next }) })).json();
+          let resp = await postTesting(next);
+          if (resp.status === 401){                   // chưa có quyền admin -> hỏi mã
+            const okAdmin = await ensureAdmin();
+            if (!okAdmin){ paint(!next); alert('Sai mã hoặc đã huỷ — không đổi được chế độ test.'); return; }
+            resp = await postTesting(next);
+          }
+          const r = await resp.json();
           paint(!!r.testing);
         } catch(e){ paint(!next); }                    // revert on failure
       };

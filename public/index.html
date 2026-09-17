@@ -368,13 +368,18 @@
     padding:calc(10px + env(safe-area-inset-top)) var(--pad-x) 4px; }
   .mineScroll{ position:relative; z-index:1; flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch;
     display:flex; flex-direction:column; align-items:center; padding:0 var(--pad-x) calc(24px + env(safe-area-inset-bottom)); }
-  /* khung đèn ông sao 3D + tranh bé ở mặt giữa */
+  /* lồng đèn do bé tạo */
   #mineLantern{ position:relative; width:188px; height:188px; margin:20px auto 0;
     display:flex; align-items:center; justify-content:center;
     animation:mineFloat 4s ease-in-out infinite; }
-  #mineLantern .mineStar{ position:absolute; inset:0; width:100%; height:100%; object-fit:contain;
+  #mineArt{ position:relative; z-index:1; width:100%; height:100%; object-fit:contain; border-radius:6px;
     filter:drop-shadow(0 8px 20px #0008) drop-shadow(0 0 22px #ffcf6a66); }
-  #mineArt{ position:relative; z-index:1; width:46%; height:46%; object-fit:contain; border-radius:6px; }
+  /* cây quạt dưới lồng đèn — mặc định đứng yên; .fanning khi đang lắc */
+  #fanEmoji{ font-size:52px; margin:6px auto 0; width:max-content; transform-origin:50% 90%;
+    transition:transform .08s ease; filter:drop-shadow(0 4px 10px #0006); }
+  #fanEmoji.fanning{ animation:fanWave .32s ease-in-out infinite; }
+  @keyframes fanWave{ 0%,100%{ transform:rotate(-24deg) } 50%{ transform:rotate(24deg) } }
+  @media (prefers-reduced-motion: reduce){ #fanEmoji.fanning{ animation:none } }
   @keyframes mineFloat{ 0%,100%{ transform:translateY(0) } 50%{ transform:translateY(-6px) } }
   .mineDots{ display:flex; flex-direction:column; align-items:center; gap:14px; margin:14px 0 18px; }
   .mineDots i{ width:7px; height:7px; border-radius:50%; background:#ffd166; }
@@ -391,6 +396,7 @@
   .playDots i{ width:22px; height:22px; border-radius:50%; background:#3a3218; box-shadow:inset 0 0 0 1px #ffffff22; transition:.2s; }
   .playDots i.on{ background:radial-gradient(circle at 40% 35%, #ffe08a, #ffb300); box-shadow:0 0 10px #ffcf6a88; }
   .playTxt{ font-size:15px; color:#fff; font-weight:700; }
+  .fanRate{ font-size:12px; color:var(--note); font-weight:600; margin-top:4px; }
   .mineHint{ font-size:14px; color:var(--desc); text-align:center; margin:16px 0 20px; line-height:1.5; }
   #fanBtn{ display:flex; align-items:center; justify-content:center; gap:8px; }
   #fanBtn .windIco{ font-size:22px; }
@@ -427,10 +433,6 @@
   .sheet p{ margin:0 0 16px; font-size:14px; color:var(--desc); line-height:1.5; }
   .sheet .resLine{ margin:0 0 8px; font-size:15px; }
   .sheet .resLine b{ color:var(--gold2); }
-  .modeRow{ display:flex; gap:10px; margin-bottom:18px; }
-  .modeBtn{ flex:1; padding:14px 8px; border-radius:14px; font-size:14px; font-weight:700;
-    background:color-mix(in srgb, var(--card) 80%, transparent); color:#fff; border:1.5px solid var(--card-border); }
-  .modeBtn.active{ border-color:var(--gold); box-shadow:0 0 0 3px #ffd16633; }
   .sheetLater{ display:block; width:100%; margin-top:12px; padding:12px; background:none; border:0;
     color:var(--note); font-size:15px; font-weight:700; }
 </style>
@@ -613,11 +615,12 @@
     </div>
   </div>
   <div class="mineScroll">
-    <!-- khung đèn ông sao 3D, mặt giữa = tranh của bé -->
+    <!-- lồng đèn do bé tạo -->
     <div id="mineLantern">
-      <img class="mineStar" src="/decor/3d-ong-sao.png" alt="Đèn ông sao">
       <img id="mineArt" alt="Lồng đèn của bạn">
     </div>
+    <!-- cây quạt: lắc điện thoại -> quạt phe phẩy tạo gió -->
+    <div id="fanEmoji" aria-hidden="true">🪭</div>
     <div class="mineDots"><i></i><i></i><i></i><i></i><i></i></div>
 
     <!-- skeleton khi tải -->
@@ -639,8 +642,9 @@
       <!-- thẻ lượt quạt (free + mua bằng lửa) -->
       <div class="hCard">
         <div class="playTxt"><span id="playsLeft">0</span> lượt quạt · 🔥 <span id="fanBal">0</span> lửa</div>
+        <div class="fanRate">🔥 <span id="firePerFan">3</span> lửa = 1 lượt quạt</div>
       </div>
-      <p class="mineHint">Lắc điện thoại hoặc chạm nút<br>để giúp lồng đèn bay cao hơn.</p>
+      <p class="mineHint">Lắc điện thoại để giúp lồng đèn bay cao hơn. 🪭</p>
       <button class="big" id="fanBtn"><span class="windIco">🌬️</span> Bắt đầu quạt</button>
       <a class="gameLink" id="mineGameLink" href="/hub">🎮 Chơi trò chơi nhận lửa ›</a>
       <a class="rankLink" id="mineRankLink">📊 Xem bảng xếp hạng ›</a>
@@ -655,11 +659,7 @@
     <div class="sheetBackdrop"></div>
     <div class="sheet">
       <h3>Sẵn sàng đưa đèn bay cao?</h3>
-      <p>Bạn có 10 giây để lắc điện thoại hoặc chạm nút tạo gió.</p>
-      <div class="modeRow">
-        <button class="modeBtn" data-mode="sensor">📳 Dùng cảm biến lắc</button>
-        <button class="modeBtn active" data-mode="tap">👆 Chạm để quạt</button>
-      </div>
+      <p>Bạn có 10 giây — <b>lắc điện thoại</b> để cây quạt tạo gió cho đèn bay lên nhé! 🪭</p>
       <button class="big" id="prepStart">Bắt đầu</button>
       <button class="sheetLater" id="prepLater">Để sau</button>
     </div>
@@ -777,14 +777,15 @@ async function loadHeightState(){
 function renderFanState(s){
   document.getElementById('playsLeft').textContent = s.playsLeft;
   const bal = document.getElementById('fanBal'); if (bal) bal.textContent = fmtVN(s.balance);
+  const fpf = document.getElementById('firePerFan'); if (fpf && s.firePerFan) fpf.textContent = s.firePerFan;
 }
 function updateFanBtn(left){
   const btn = document.getElementById('fanBtn');
   const hint = document.querySelector('.mineHint');
   if (left <= 0){
-    // hết lượt -> nút dẫn thẳng sang trang trò chơi để farm lửa
-    btn.disabled = false; btn.innerHTML = '🎮 Chơi game để nhận thêm lửa';
-    btn.dataset.toGame = '1';
+    // hết lượt -> nút vô hiệu hoá, hiển thị rõ đã hết lượt quạt
+    btn.disabled = true; btn.innerHTML = 'Hết lượt quạt';
+    delete btn.dataset.toGame;
     if (hint) hint.style.display = 'none';        // ẩn hướng dẫn lắc
   } else {
     btn.disabled = false; btn.innerHTML = '<span class="windIco">🌬️</span> Bắt đầu quạt';
@@ -823,10 +824,10 @@ function updateFanBtn(left){
 document.getElementById('mineRetry').onclick = loadHeightState;
 document.getElementById('mineRankLink').onclick = () => { location.href='/rank'; };
 
-// ---------- game tạo gió (bước 5) ----------
-let fanMode = 'tap';          // 'tap' | 'sensor'
+// ---------- game tạo gió (bước 5) — CHỈ lắc điện thoại ----------
 let fanPlay = null;           // {id, endsAt}
 let fanHits = 0, fanTimer = null, fanEndTimer = null, lastHit = 0, motionOn = false;
+let fanWaveTimer = null;      // hẹn giờ tắt hiệu ứng quạt vẫy sau mỗi nhịp lắc
 const sheet = id => document.getElementById(id);
 function openSheet(id){ sheet(id).classList.add('on'); }
 function closeSheet(id){ sheet(id).classList.remove('on'); }
@@ -838,19 +839,22 @@ document.getElementById('fanBtn').onclick = (e) => {
   openSheet('prepSheet');
 };
 document.getElementById('prepLater').onclick = () => closeSheet('prepSheet');
-document.querySelectorAll('.modeBtn').forEach(b => b.onclick = () => {
-  document.querySelectorAll('.modeBtn').forEach(x=>x.classList.remove('active'));
-  b.classList.add('active'); fanMode = b.dataset.mode;
-});
 
+let motionAllowed = true;     // false nếu người dùng từ chối quyền cảm biến (iOS)
 document.getElementById('prepStart').onclick = async () => {
   const btn = document.getElementById('prepStart');
   btn.disabled = true;
-  // xin quyền cảm biến CHỈ khi chọn sensor (chưa trừ lượt ở bước này)
-  if (fanMode === 'sensor' && typeof DeviceMotionEvent !== 'undefined'
+  // iOS "Shake to Undo": lắc khi còn ô nhập đang focus / vừa gõ sẽ bật popup
+  // "Undo Typing". Bỏ focus mọi input trước khi vào vòng lắc để iOS không còn
+  // thao tác gõ nào để undo.
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  // xin quyền cảm biến chuyển động (iOS 13+ cần gesture). Từ chối -> vẫn chơi
+  // được nhưng không lắc được, sẽ báo cho người dùng.
+  motionAllowed = true;
+  if (typeof DeviceMotionEvent !== 'undefined'
       && typeof DeviceMotionEvent.requestPermission === 'function'){
-    try { const p = await DeviceMotionEvent.requestPermission(); if (p !== 'granted') fanMode = 'tap'; }
-    catch(e){ fanMode = 'tap'; }
+    try { const p = await DeviceMotionEvent.requestPermission(); motionAllowed = (p === 'granted'); }
+    catch(e){ motionAllowed = false; }
   }
   // idempotent: 1 request_id cho mỗi lần bấm Bắt đầu
   const rid = 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
@@ -870,43 +874,64 @@ document.getElementById('prepStart').onclick = async () => {
   startFanRound();
 };
 
+// mỗi nhịp lắc: đèn nảy lên + cây quạt phe phẩy tạo gió
 function registerHit(){
   const now = Date.now();
   if (now < lastHit + 200) return;      // lọc nhiễu: tối đa ~5 lần/giây phía client
   lastHit = now; fanHits++;
   const l = document.getElementById('mineLantern');
   if (l){ l.style.transform = 'translateY(-14px)'; setTimeout(()=>{ l.style.transform=''; }, 120); }
+  // cây quạt vẫy: bật animation, tự tắt nếu ngừng lắc
+  const fan = document.getElementById('fanEmoji');
+  if (fan){
+    fan.classList.add('fanning');
+    clearTimeout(fanWaveTimer);
+    fanWaveTimer = setTimeout(()=>fan.classList.remove('fanning'), 400);
+  }
 }
 function onMotion(e){
   const a = e.accelerationIncludingGravity || e.acceleration; if(!a) return;
   const mag = Math.abs(a.x||0) + Math.abs(a.y||0) + Math.abs(a.z||0);
-  if (mag > 22) registerHit();          // ngưỡng lắc
+  if (mag > 18) registerHit();          // ngưỡng lắc (gồm cả trọng lực ~10)
 }
 function startFanRound(){
   fanHits = 0; lastHit = 0;
   const btn = document.getElementById('fanBtn');
-  btn.disabled = false;
-  btn.innerHTML = '<span class="windIco">🌬️</span> Chạm để quạt';
-  btn.onclick = registerHit;            // chạm luôn dùng được (kể cả khi bật cảm biến)
-  if (fanMode === 'sensor' && typeof DeviceMotionEvent !== 'undefined'){
+  btn.disabled = true;                  // trong lúc quạt, nút chỉ hiển thị trạng thái
+  btn.onclick = null;
+  btn.innerHTML = '<span class="windIco">🌬️</span> Đang quạt…';
+  // CHỈ dùng cảm biến lắc (đã bỏ chạm-để-quạt)
+  if (typeof DeviceMotionEvent !== 'undefined'){
     window.addEventListener('devicemotion', onMotion); motionOn = true;
   }
+  const hintEl = document.querySelector('.mineHint');
+  const shakeMsg = motionAllowed
+    ? 'Lắc điện thoại thật mạnh! 🪭'
+    : 'Máy không cho phép cảm biến — hãy bật quyền chuyển động để lắc nhé!';
+  // Đếm ngược theo THỜI LƯỢNG tương đối phía client (durationMs), KHÔNG dùng
+  // endsAt tuyệt đối của server: đồng hồ điện thoại lệch với server làm vòng
+  // chơi kết thúc ngay khi vừa bắt đầu. Server vẫn tự chặn trần theo thời gian
+  // thực ở /finish nên không gian lận được.
+  const durationMs = (heightState && heightState.durationMs) || 10000;
+  const startedAt = Date.now();
   const tick = () => {
-    const left = Math.max(0, fanPlay.endsAt - Date.now());
-    document.querySelector('.mineHint').innerHTML = 'Đang quạt… <b>' + Math.ceil(left/1000) + 's</b>';
+    const left = Math.max(0, durationMs - (Date.now() - startedAt));
+    if (hintEl) hintEl.innerHTML = shakeMsg + ' <b>' + Math.ceil(left/1000) + 's</b>';
     if (left <= 0){ endFanRound(); }
   };
   tick();
   fanTimer = setInterval(tick, 200);
-  fanEndTimer = setTimeout(endFanRound, Math.max(0, fanPlay.endsAt - Date.now()) + 50);
+  fanEndTimer = setTimeout(endFanRound, durationMs + 50);
 }
 async function endFanRound(){
   if (!fanPlay) return;
   clearInterval(fanTimer); clearTimeout(fanEndTimer); fanTimer=fanEndTimer=null;
   if (motionOn){ window.removeEventListener('devicemotion', onMotion); motionOn=false; }
+  clearTimeout(fanWaveTimer);
+  const fan = document.getElementById('fanEmoji'); if (fan) fan.classList.remove('fanning');
   const btn = document.getElementById('fanBtn');
   btn.onclick = null; btn.disabled = true; btn.innerHTML = 'Đang lưu kết quả…';
-  document.querySelector('.mineHint').innerHTML = 'Lắc điện thoại hoặc chạm nút<br>để giúp lồng đèn bay cao hơn.';
+  document.querySelector('.mineHint').innerHTML = 'Lắc điện thoại để giúp lồng đèn bay cao hơn.';
   const play = fanPlay; fanPlay = null;
   let r;
   try { r = await (await fetch('/api/height/finish',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -1525,27 +1550,48 @@ async function launch(){
 }
 
 // ── chờ đèn xuất hiện trên /screen rồi mới mở bước 5 ──
+// Trước đây chỉ nghe socket 'lantern-appeared' + poll /api/my-lantern ĐÚNG 1 LẦN.
+// Nếu không có màn /screen nào mở (TV tắt), hoặc socket rớt, 'appeared' không bao
+// giờ về 1 -> user kẹt ở màn "Đã gửi lồng đèn". Khắc phục: (a) poll lặp lại,
+// (b) fallback sau vài giây vẫn mở nút (đèn đã thả thành công rồi).
 let appearSocket = null;
+let appearPollTimer = null, appearFallbackTimer = null, appearDone = false;
 function waitForAppear(id){
   const btn = document.getElementById('doneBtn');
   const wait = document.getElementById('doneWait');
-  // nếu đèn đã từng xuất hiện (vd reload), mở nút luôn
+  appearDone = false;
+  const enableBtn = () => { btn.disabled = false; btn.style.opacity = '1';
+    btn.textContent = 'Xem lồng đèn của tôi'; btn.onclick = () => showMyLantern(); };
+  const stopTimers = () => { clearInterval(appearPollTimer); clearTimeout(appearFallbackTimer);
+    appearPollTimer = appearFallbackTimer = null; };
+  // đèn ĐÃ xuất hiện trên màn hình lớn
   const markAppeared = () => {
+    if (appearDone) return; appearDone = true; stopTimers();
     document.getElementById('doneTitle').textContent = 'Lồng đèn của bạn đã xuất hiện! 🎉';
     document.getElementById('doneMsg').textContent = 'Tiếp tục tạo gió để giúp lồng đèn bay cao hơn.';
     if (wait) wait.style.display = 'none';
-    btn.disabled = false; btn.style.opacity = '1';
-    btn.textContent = 'Xem lồng đèn của tôi';
-    btn.onclick = () => showMyLantern();
+    enableBtn();
+  };
+  // fallback: đèn đã thả OK nhưng chưa/không hiển thị trên /screen -> đừng để kẹt
+  const markReleasedAnyway = () => {
+    if (appearDone) return; appearDone = true; stopTimers();
+    document.getElementById('doneTitle').textContent = 'Đã gửi lồng đèn! 🎉';
+    document.getElementById('doneMsg').textContent = 'Lồng đèn của bạn đã được thả. Xem và tạo gió để đèn bay cao hơn nhé!';
+    if (wait) wait.style.display = 'none';
+    enableBtn();
   };
   try {
     if (!appearSocket) appearSocket = io();
     appearSocket.on('lantern-appeared', (d) => { if (d && d.id === id) markAppeared(); });
   } catch(e){}
-  // phòng khi đã appeared trước khi kịp nghe (poll 1 lần qua /api/my-lantern)
-  fetch('/api/my-lantern').then(r=>r.json()).then(m=>{
+  // poll LẶP LẠI mỗi 3s (không chỉ 1 lần) để bắt trạng thái kể cả khi socket miss
+  const poll = () => fetch('/api/my-lantern').then(r=>r.json()).then(m=>{
     if (m.lantern && m.lantern.id === id && m.lantern.appeared) markAppeared();
   }).catch(()=>{});
+  poll();
+  appearPollTimer = setInterval(poll, 3000);
+  // sau 15s vẫn chưa xuất hiện -> mở nút để user không bị kẹt
+  appearFallbackTimer = setTimeout(markReleasedAnyway, 15000);
 }
 
 // ── floating lanterns drifting up the welcome background ──

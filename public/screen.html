@@ -11,6 +11,20 @@
              background:#8a1a12cc; color:#ffe9b0; border:1px solid #ffd77a; border-radius:20px;
              padding:8px 16px; font:600 14px system-ui,sans-serif; box-shadow:0 4px 16px #0007; }
 
+  /* dòng đếm số lồng đèn — góc trên bên trái, chữ trắng, IN HOA, cỡ nhỏ */
+  #countBar{ position:fixed; left:22px; top:20px; z-index:8;
+             color:#fff; font:700 15px system-ui,sans-serif; text-transform:uppercase;
+             line-height:1.35; letter-spacing:.4px; text-align:left;
+             text-shadow:0 2px 8px #000a; pointer-events:none; }
+  #countBar b{ color:#fff; }
+
+  /* nút toàn màn hình — góc phải trên, kín đáo, không che canvas */
+  #fsBtn{ position:fixed; right:18px; top:18px; z-index:12;
+          background:#1a0f3ccc; color:#ffe9b0; border:1px solid #ffd77a; border-radius:20px;
+          padding:8px 14px; font:600 14px system-ui,sans-serif; cursor:pointer;
+          box-shadow:0 4px 16px #0007; transition:opacity .4s; }
+  #fsBtn:hover{ opacity:1 !important; }
+
   /* Chú Cuội góc trái dưới — lắc lư nhẹ nhàng, tươi vui */
   #cuoiWrap{ position:fixed; left:12px; bottom:0; z-index:9; height:32vh; pointer-events:none; }
   /* gốc xoay ở vùng vai/cổ (~30% từ trên) -> chỉ phần đầu nghiêng, thân đứng yên */
@@ -29,17 +43,16 @@
   @keyframes lampFlicker{ 0%,100%{ opacity:.55; transform:scale(1) } 50%{ opacity:1; transform:scale(1.12) } }
 
   /* QR góc phải dưới — khung tre cắt từ demo.jpeg, QR thật đặt đè lên ô trắng */
-  #qrCard{ position:fixed; right:48px; bottom:60px; z-index:10; width:246px;
+  #qrCard{ position:fixed; right:48px; bottom:60px; z-index:10; width:160px;
            text-align:center; font-family:system-ui,sans-serif;
            filter:drop-shadow(0 0 30px #ff9a1a55); }
-  #qrLantern{ position:relative; width:246px; height:192px; margin:0 auto;
-    background:url('/decor/qr-frame.png') center/contain no-repeat; }
-  /* ô trắng thật của khung nằm ~ 12%..80% ngang, 8%..88% dọc -> đặt QR khít vào giữa vùng đó */
-  #qrCard .box{ position:absolute; left:17%; top:13%; width:52%; height:72%;
-    display:flex; align-items:center; justify-content:center; }
+  #qrLantern{ position:relative; width:160px; height:160px; margin:0 auto;
+    background:url('/decor/qr-cube-final.png') center/contain no-repeat; }
+  /* QR đã in sẵn trong ảnh khối tre -> ẩn ô overlay cũ để khỏi chồng hai lớp */
+  #qrCard .box{ display:none; }
   #qrCard .box img{ position:relative; z-index:1; width:100%; height:100%; object-fit:contain; image-rendering:pixelated; }
   /* nhãn dưới khung */
-  #qrCard .tt{ color:#fff; font-weight:700; font-size:20px; margin-top:10px; letter-spacing:.2px;
+  #qrCard .tt{ color:#fff; font-weight:700; font-size:15px; margin-top:-6px; letter-spacing:.2px; white-space:nowrap;
     text-shadow:0 2px 8px #000a; }
   #qrCard .lt, #qrCard .ft{ display:none; }
 </style>
@@ -47,6 +60,8 @@
 <body>
 <canvas id="sky"></canvas>
 <div id="audioTip">🔊 Chạm một lần để bật âm thanh</div>
+<div id="countBar">Đã có hơn <b id="countN">…</b> lồng đèn<br>được thả tại VML Việt Nam</div>
+<button id="fsBtn" onclick="toggleFullscreen()">⛶ Toàn màn hình</button>
 
 
 <!-- QR góc phải dưới -->
@@ -456,6 +471,47 @@ fetch('/api/recent').then(r=>r.json()).then(list => {
 // live updates -> grand entrance
 const socket = io();
 socket.on('new-lantern', enqueueEntrance);
+
+// ── Dòng đếm số lồng đèn đã thả ────────────────────────────────────
+let lanternCount = 0;
+function renderCount(){
+  document.getElementById('countN').textContent = lanternCount.toLocaleString('vi-VN');
+}
+fetch('/api/count').then(r => r.json()).then(d => {
+  lanternCount = d.count || 0; renderCount();
+}).catch(()=>{});
+// mỗi lồng đèn mới thả -> tăng bộ đếm
+socket.on('new-lantern', () => { lanternCount++; renderCount(); });
+
+// ── Nút toàn màn hình cho TV ───────────────────────────────────────
+function toggleFullscreen(){
+  const el = document.documentElement;
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  if (!fsEl){
+    (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+  } else {
+    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+  }
+}
+function syncFsLabel(){
+  const on = document.fullscreenElement || document.webkitFullscreenElement;
+  const btn = document.getElementById('fsBtn');
+  btn.textContent = '⛶ Toàn màn hình';
+  // đang toàn màn hình -> ẩn hẳn nút (không có nút Thoát); thoát -> hiện lại
+  btn.style.display = on ? 'none' : '';
+}
+document.addEventListener('fullscreenchange', syncFsLabel);
+document.addEventListener('webkitfullscreenchange', syncFsLabel);
+// tự mờ nút sau 4s không tương tác (vẫn bấm được, hover sáng lại)
+const fsBtn = document.getElementById('fsBtn');
+let fsTimer;
+function pokeFsBtn(){
+  fsBtn.style.opacity = '1';
+  clearTimeout(fsTimer);
+  fsTimer = setTimeout(() => { fsBtn.style.opacity = '.15'; }, 4000);
+}
+window.addEventListener('mousemove', pokeFsBtn);
+pokeFsBtn();
 
 // QR = file tĩnh đã xoá nền (public/decor/qr-live.png), trỏ tới lantern.vml-team.site.
 // Thay ảnh này là đổi QR — không cần sửa code. ?v=... để phá cache trình duyệt.

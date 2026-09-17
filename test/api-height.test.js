@@ -47,15 +47,12 @@ test('A-3 first START -> kind release, no spend', async () => {
   assert.equal(s.data.balance, 3, 'free release does not spend fire');
 });
 
-// A-4 second same-day start = daily; third (free used) with fire = paid, debits
-test('A-4 start sequence release -> daily -> paid(debit)', async () => {
+// A-4 first start = release (free); second (free used) with fire = paid, debits
+test('A-4 start sequence release -> paid(debit)', async () => {
   const g = await u(3);
   const r = await g.call('POST', '/api/height/start', { request_id: 'a4-r' });
   assert.equal(r.data.kind, 'release');
   await g.call('POST', '/api/height/finish', { play_id: r.data.playId, hits: 0 });
-  const d = await g.call('POST', '/api/height/start', { request_id: 'a4-d' });
-  assert.equal(d.data.kind, 'daily');
-  await g.call('POST', '/api/height/finish', { play_id: d.data.playId, hits: 0 });
   const p = await g.call('POST', '/api/height/start', { request_id: 'a4-p' });
   assert.equal(p.data.kind, 'paid');
   assert.equal(p.data.balance, 0, 'paid debits FIRE_PER_FAN');

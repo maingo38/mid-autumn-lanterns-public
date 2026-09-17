@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Lồng đèn — Bầu trời đèn (thử nghiệm)</title>
+<style>
+  html,body{ margin:0; min-height:100%; background:#0a0620; color:#fff;
+             font-family:system-ui,sans-serif; }
+  /* nền galaxy cố định, cuộn nội dung phía trên */
+  body{ background:url('/decor/Background.jpeg') center/cover fixed no-repeat, #0a0620; }
+  body::before{ content:''; position:fixed; inset:0; z-index:0;
+                background:radial-gradient(circle at 50% 40%, rgba(0,0,0,0) 30%, rgba(4,2,16,.55) 100%); }
+
+  #title{ position:relative; z-index:2; text-align:center; padding:18px 12px 4px;
+          font:700 26px system-ui,sans-serif; letter-spacing:.4px; text-shadow:0 2px 10px #000a; }
+  #title small{ display:block; font:600 15px system-ui,sans-serif; color:#ffd77a; margin-top:4px; }
+
+  /* vùng bầu trời: đèn rải NGẪU NHIÊN bằng vị trí tuyệt đối; tự nới cao + cuộn dọc */
+  #sky{ position:relative; z-index:1; width:100%; }
+
+  /* mỗi lồng đèn: đặt tuyệt đối tại (left,top), bồng bềnh tại chỗ */
+  .lantern{ position:absolute; display:flex; flex-direction:column; align-items:center; gap:6px;
+            transition:width .6s ease;
+            animation:float2 3.6s ease-in-out infinite; will-change:transform; }
+  /* quầng sáng ấm phía sau — kích thước theo % nên đèn to -> quầng to/sáng hơn */
+  .lantern::before{ content:''; position:absolute; left:50%; top:36%;
+                    transform:translate(-50%,-50%);
+                    width:150%; height:95%; border-radius:50%; z-index:-1; pointer-events:none;
+                    background:radial-gradient(circle,
+                       #ffdf9e77 0%, #ffcf6a55 32%, #ff8c1a2e 54%, transparent 72%);
+                    filter:blur(8px); animation:halo 3.6s ease-in-out infinite; }
+  .lantern img{ width:100%; height:auto; display:block;
+                filter:drop-shadow(0 0 14px #ffcf6acc) drop-shadow(0 0 30px #ff8c1a88)
+                       drop-shadow(0 6px 14px #0007); }
+  .lantern .cap{ text-align:center; line-height:1.25; text-shadow:0 2px 8px #000c; max-width:180px; }
+  .lantern .nm{ font:700 14px system-ui,sans-serif; color:#ffe9b0; }
+  .lantern .ws{ font:italic 500 13px Georgia,serif; color:#e9e0ff;
+                display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+                overflow:hidden; }
+
+  @keyframes float2{
+    0%   { transform:translateY(0)    rotate(-1.3deg); }
+    50%  { transform:translateY(-9px) rotate(1.3deg); }
+    100% { transform:translateY(0)    rotate(-1.3deg); }
+  }
+  @keyframes halo{ 0%,100%{ opacity:.5 } 50%{ opacity:.95 } }
+
+  #fsBtn{ position:fixed; right:18px; top:18px; z-index:12;
+          background:#1a0f3ccc; color:#ffe9b0; border:1px solid #ffd77a; border-radius:20px;
+          padding:8px 14px; font:600 14px system-ui,sans-serif; cursor:pointer;
+          box-shadow:0 4px 16px #0007; }
+</style>
+</head>
+<body>
+<div id="title">🏮 Bầu trời lồng đèn<small>Mỗi chiếc đèn mang một lời chúc</small></div>
+<button id="fsBtn" onclick="toggleFullscreen()">⛶ Toàn màn hình</button>
+<div id="sky"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+// ── CÀI ĐẶT ────────────────────────────────────────────────────────
+const MIN_SIZE = 90;    // px bề rộng đèn thấp nhất (height=0)
+const MAX_SIZE = 240;   // px bề rộng đèn cao nhất
+const GAP      = 26;    // khoảng cách tối thiểu giữa hai đèn (px)
+const SHOW_NAMES = true;
+
+const sky = document.getElementById('sky');
+const byId = new Map();          // id -> { id, el, img, name, wish, height, w }
+
+// map độ cao -> bề rộng px: tuyến tính giữa MIN_SIZE..MAX_SIZE theo max hiện có.
+function sizeFor(height){
+  let max = 0;
+  for (const r of byId.values()) if (r.height > max) max = r.height;
+  if (max <= 0) return MIN_SIZE;
+  const f = Math.max(0, Math.min(1, height / max));
+  return Math.round(MIN_SIZE + (MAX_SIZE - MIN_SIZE) * f);
+}
+
+// ── RẢI NGẪU NHIÊN + TRÁNH VA CHẠM + TỰ NỚI ────────────────────────
+// Đặt lại toàn bộ đèn ở vị trí ngẫu nhiên, không chồng đè (kiểm tra khung
+// chữ nhật + GAP). Nếu không tìm được chỗ -> nới cao vùng #sky rồi thử lại.
+// Đèn to đặt trước (khó nhét hơn). Chiều cao ước lượng = width*1.3 + caption.
+function relayout(){
+  const items = [...byId.values()];
+  if (!items.length){ sky.style.height = '0px'; return; }
+  for (const r of items) r.w = sizeFor(r.height);
+
+  const areaW = sky.clientWidth || window.innerWidth;
+  let areaH = Math.max(320, window.innerHeight - sky.offsetTop - 8);
+  const placed = [];
+  let maxBottom = 0;
+
+  const boxH = r => Math.round(r.w * 1.3) + (SHOW_NAMES ? 44 : 12);
+
+  items.sort((a,b)=> b.w - a.w);   // đèn to trước
+  for (const r of items){
+    const rw = r.w, rh = boxH(r);
+    let tries = 0, ok = false, x = 0, y = 0;
+    while (!ok){
+      x = Math.random() * Math.max(1, areaW - rw);
+      y = Math.random() * Math.max(1, areaH - rh);
+      ok = true;
+      for (const p of placed){
+        if (x < p.x + p.w + GAP && x + rw + GAP > p.x &&
+            y < p.y + p.h + GAP && y + rh + GAP > p.y){ ok = false; break; }
+      }
+      if (!ok && ++tries > 200){ areaH += rh + GAP; tries = 0; }  // nới cao, thử lại
+    }
+    placed.push({ x, y, w: rw, h: rh });
+    r.el.style.left  = x + 'px';
+    r.el.style.top   = y + 'px';
+    r.el.style.width = rw + 'px';
+    if (y + rh > maxBottom) maxBottom = y + rh;
+  }
+  sky.style.height = Math.ceil(Math.max(areaH, maxBottom) + 12) + 'px';
+}
+
+// gộp nhiều thay đổi (nạp hàng loạt lúc load) thành 1 lần bố trí
+let layoutPending = false;
+function scheduleLayout(){
+  if (layoutPending) return;
+  layoutPending = true;
+  requestAnimationFrame(() => { layoutPending = false; relayout(); });
+}
+addEventListener('resize', scheduleLayout);
+
+function makeLantern(rec){
+  const el = document.createElement('div');
+  el.className = 'lantern';
+  el.style.animationDelay = (-Math.random() * 4).toFixed(2) + 's';  // lệch pha bồng bềnh
+  const img = document.createElement('img');
+  img.src = '/lanterns/' + rec.file;
+  img.alt = rec.name || 'lồng đèn';
+  img.addEventListener('load', scheduleLayout);   // ảnh tải xong -> bố trí lại cho khít
+  el.appendChild(img);
+  if (SHOW_NAMES){
+    const cap = document.createElement('div');
+    cap.className = 'cap';
+    cap.innerHTML = '<div class="nm"></div><div class="ws"></div>';
+    el.appendChild(cap);
+  }
+  const r = { id: rec.id, el, img, name: rec.name || '', wish: rec.wish || '',
+              height: rec.height || 0, w: MIN_SIZE };
+  byId.set(rec.id, r);
+  renderCap(r);
+  return r;
+}
+
+// hiện TÊN (nếu có) + LỜI CHÚC (chính); wish rỗng -> ẩn dòng chữ
+function renderCap(r){
+  if (!SHOW_NAMES) return;
+  r.el.querySelector('.nm').textContent = r.name;
+  const ws = r.el.querySelector('.ws');
+  ws.textContent = r.wish || '';
+  ws.style.display = r.wish ? '' : 'none';
+}
+
+function addLantern(rec){
+  if (byId.has(rec.id)) return;
+  const r = makeLantern(rec);
+  sky.appendChild(r.el);
+  scheduleLayout();
+}
+
+// ── Nạp danh sách ban đầu ──────────────────────────────────────────
+// /api/recent CÓ 'wish' cho mọi đèn approved (không có height);
+// /api/leaderboard/height có height (không có wish). Gộp: height từ board,
+// wish từ recent theo id.
+Promise.all([
+  fetch('/api/recent').then(r=>r.json()).catch(()=>[]),
+  fetch('/api/leaderboard/height').then(r=>r.json()).then(d=>d.board||[]).catch(()=>[]),
+]).then(([recent, board]) => {
+  const heights = new Map(board.map(b => [b.id, b.height]));
+  const wishes  = new Map(recent.map(rec => [rec.id, rec.wish || '']));
+  const seen = new Set();
+  for (const b of board){
+    addLantern({ id:b.id, file:b.file, name:b.name, height:b.height, wish: wishes.get(b.id) || '' });
+    seen.add(b.id);
+  }
+  for (const rec of recent){
+    if (seen.has(rec.id)) continue;
+    addLantern({ id:rec.id, file:rec.file, name:rec.name, height: heights.get(rec.id) || 0, wish: rec.wish || '' });
+  }
+});
+
+// ── Realtime ───────────────────────────────────────────────────────
+const socket = io();
+// đèn mới thả -> thêm (kèm wish từ socket, height=0)
+socket.on('new-lantern', rec => {
+  if (!rec || rec.id == null || !rec.file) return;
+  addLantern({ id:rec.id, file:rec.file, name:rec.name, wish: rec.wish || '', height:0 });
+});
+// đèn được quạt cao hơn -> đổi độ cao, đổi size + bố trí lại
+socket.on('height-changed', ({ id, height }) => {
+  const r = byId.get(id);
+  if (!r) return;
+  r.height = height || 0;
+  scheduleLayout();   // thang đo đổi -> size + vị trí cập nhật
+});
+// đèn bị gỡ -> bỏ
+socket.on('remove-lantern', ({ id }) => {
+  const r = byId.get(id);
+  if (!r) return;
+  r.el.remove(); byId.delete(id);
+  scheduleLayout();
+});
+
+// ── Toàn màn hình cho TV ───────────────────────────────────────────
+function toggleFullscreen(){
+  const el = document.documentElement;
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  if (!fsEl) (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+  else (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+}
+</script>
+</body>
+</html>

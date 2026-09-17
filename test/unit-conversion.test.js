@@ -43,12 +43,12 @@ test('U-2 balance 2, no free -> playsLeft 0 and START no_fire', async () => {
   assert.equal(start.data.error, 'no_fire');
 });
 
-// U-3 free + paid stack: has lantern, no free used, balance 3 -> free 2 + 1 = 3
-test('U-3 free(2) + paid(1) stack -> playsLeft 3', async () => {
+// U-3 free + paid stack: has lantern, no free used, balance 3 -> free 1 + 1 = 2
+test('U-3 free(1) + paid(1) stack -> playsLeft 2', async () => {
   const u = await userWith({ fire: 3 });
   const s = await u.call('GET', '/api/height/state');
-  assert.equal(s.data.freePlays, 2);
-  assert.equal(s.data.playsLeft, 3);
+  assert.equal(s.data.freePlays, 1);
+  assert.equal(s.data.playsLeft, 2);
 });
 
 // U-4 no approved lantern -> freePlays 0 (state reports hasLantern:false)
@@ -58,21 +58,22 @@ test('U-4 no lantern -> hasLantern false (freePlays 0)', async () => {
   assert.equal(s.data.hasLantern, false);
 });
 
-// U-5 release used -> 1 free left (daily)
-test('U-5 release used -> freePlays 1', async () => {
+// U-5 release used -> no free left (only 1 free per lantern now)
+test('U-5 release used -> freePlays 0', async () => {
   const u = await userWith({});
   seedPlay(srv.dbPath, u.sub, u.lid, { kind: 'release' });
   const s = await u.call('GET', '/api/height/state');
-  assert.equal(s.data.freePlays, 1);
+  assert.equal(s.data.freePlays, 0);
 });
 
-// U-6 daily from a previous day does not consume today's daily free
-test('U-6 daily used yesterday -> today still has daily free', async () => {
+// U-6 free play is one-time (release), not per-day: a legacy 'daily' row from
+// another day does not grant an extra free play today.
+test('U-6 free play is one-time release, not per-day', async () => {
   const u = await userWith({});
   seedPlay(srv.dbPath, u.sub, u.lid, { kind: 'daily', day: '2000-01-01' });
   const s = await u.call('GET', '/api/height/state');
-  // release still available (1) + today's daily still available (1) = 2
-  assert.equal(s.data.freePlays, 2);
+  // only the one-time release free play counts -> 1
+  assert.equal(s.data.freePlays, 1);
 });
 
 // U-7 earned accumulates across spin+puzzle+game

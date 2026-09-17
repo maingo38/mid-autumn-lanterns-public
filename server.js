@@ -260,7 +260,7 @@ function todayVN() {
 // ── Mở khoá mini game theo NGÀY sự kiện ────────────────────────────
 // Sự kiện chạy 5 ngày (T2→T6). Mỗi ngày mở thêm 1 trò; user chọn chơi trò nào
 // trong số đã mở (vẫn giới hạn tổng 1 lượt chơi/ngày). EVENT_START = ngày 1.
-const EVENT_START = process.env.EVENT_START || '2026-09-21';
+const EVENT_START = process.env.EVENT_START || '2026-09-18';
 // số thứ tự ngày sự kiện theo giờ VN: ngày bắt đầu = 1; <1 nghĩa là chưa tới.
 function eventDayNum() {
   const start = new Date(EVENT_START + 'T00:00:00+07:00');
@@ -319,11 +319,11 @@ function wallet(voter, day) {
     "SELECT COUNT(*) AS n FROM height_plays WHERE user_sub=? AND kind='paid' AND (finalized=1 OR ends_at>?)"
   ).get(voter, Date.now()).n;
   const spent  = paidPlays * FIRE_PER_FAN;
-  // lượt quạt MIỄN PHÍ: 1 lần khi thả đèn (release) + 1 lần mỗi ngày (daily).
+  // lượt quạt MIỄN PHÍ: đúng 1 lần khi thả đèn (release). Hết lượt free thì mua
+  // bằng lửa (paid). Không còn lượt 'daily' mỗi ngày.
   const hasLantern = !!db.prepare("SELECT 1 FROM lanterns WHERE user_sub=? AND status='approved'").get(voter);
   const usedRelease = db.prepare("SELECT COUNT(*) AS n FROM height_plays WHERE user_sub=? AND kind='release'").get(voter).n;
-  const usedDaily   = db.prepare("SELECT COUNT(*) AS n FROM height_plays WHERE user_sub=? AND kind='daily' AND day=?").get(voter, todayVN()).n;
-  const freePlays = hasLantern ? ((usedRelease ? 0 : 1) + (usedDaily ? 0 : 1)) : 0;
+  const freePlays = hasLantern ? (usedRelease ? 0 : 1) : 0;
   const spun   = !!db.prepare('SELECT 1 FROM spins WHERE voter=? AND day=?').get(voter, day);
   const puzzled= !!db.prepare('SELECT 1 FROM puzzles WHERE voter=? AND day=?').get(voter, day);
   const playedRows = db.prepare('SELECT game FROM games WHERE voter=? AND day=?').all(voter, day);
@@ -549,6 +549,11 @@ app.post('/api/auth/logout', (req, res) => {
 // friendly URL for the big screen (so /screen works, not just /screen.html)
 app.get('/screen', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'screen.html'));
+});
+
+// EXPERIMENTAL big screen — lồng đèn đứng im, kích thước theo độ cao (không trôi)
+app.get('/screen2', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'screen2.html'));
 });
 
 // friendly URL for the standalone QR page (own tab / second monitor / print)
@@ -814,10 +819,9 @@ app.post('/api/height/start', requireAuth, (req, res) => {
   const w = wallet(sub, today());
   if (w.fanPlays < 1)
     return res.status(403).json({ error: 'no_fire', playsLeft: 0, balance: w.balance, firePerFan: FIRE_PER_FAN });
-  // chọn loại lượt: ưu tiên free (release trước, rồi daily), hết free mới trừ lửa (paid).
+  // chọn loại lượt: 1 lượt free khi thả đèn (release), hết free thì trừ lửa (paid).
   const usedRelease = db.prepare("SELECT COUNT(*) AS n FROM height_plays WHERE user_sub=? AND kind='release'").get(sub).n;
-  const usedDaily   = db.prepare("SELECT COUNT(*) AS n FROM height_plays WHERE user_sub=? AND kind='daily' AND day=?").get(sub, day).n;
-  const kind = !usedRelease ? 'release' : (!usedDaily ? 'daily' : 'paid');
+  const kind = !usedRelease ? 'release' : 'paid';
   const endsAt = now + HEIGHT_CFG.durationMs;
   const info = db.prepare(
     'INSERT INTO height_plays (user_sub, lantern_id, day, request_id, started_at, ends_at, created, kind) VALUES (?,?,?,?,?,?,?,?)'
@@ -904,6 +908,12 @@ app.get('/api/my-lantern', (req, res) => {
     "SELECT COUNT(*)+1 AS r FROM lanterns WHERE status='approved' AND height > ?"
   ).get(row.height).r;
   res.json({ lantern: { ...row, rank } });
+});
+
+// how many lanterns have been released (approved) — the big screen shows this count
+app.get('/api/count', (req, res) => {
+  const { count } = db.prepare("SELECT COUNT(*) AS count FROM lanterns WHERE status='approved'").get();
+  res.json({ count });
 });
 
 // most recent APPROVED lanterns, newest last — the screen asks for these on load
