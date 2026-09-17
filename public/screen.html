@@ -207,7 +207,7 @@ let _lastStep = 0;
 // ── Giới hạn HIỂN THỊ đồng thời: tối đa 100 đèn trên màn. Nếu pool đông hơn,
 // ẩn bớt NGẪU NHIÊN số dư; định kỳ XOAY VÒNG — đèn đang ẩn hiện lại, đèn khác
 // ẩn thay. Đèn 'nghỉ' được tạm dừng (không tiến z) nên hiện lại đúng chỗ cũ.
-const DISPLAY_CAP = 100;      // số đèn tối đa hiển thị cùng lúc
+const DISPLAY_CAP = 50;       // số đèn tối đa hiển thị cùng lúc
 const ROTATE_MS = 9000;       // mỗi 9s đổi lượt đèn ẩn/hiện
 let _lastRotate = 0;
 function rotateVisibility(t){
