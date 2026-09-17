@@ -126,7 +126,8 @@ test('A-11 FINISH caps at maxMeters', async () => {
     startedAt: Date.now() - 20000, endsAt: Date.now() + 5000, requestId: 'a11',
   });
   const f = await g.call('POST', '/api/height/finish', { play_id: pid, hits: 999 });
-  assert.equal(f.data.added, 300, 'capped at maxMeters=300');
+  // base caps at maxMeters=300, then ±15% jitter -> [255, 345]
+  assert.ok(f.data.added >= 255 && f.data.added <= 345, `capped+jitter, got ${f.data.added}m`);
 });
 
 // A-12 finish idempotent

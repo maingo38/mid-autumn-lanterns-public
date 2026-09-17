@@ -29,8 +29,8 @@ test('A-14 FINISH is time-gated -> instant finish credits ~0m (R-4 fixed)', asyn
   // finish instantly with a maxed hit count -> elapsed ~0 -> capped near 0
   const f = await call('POST', '/api/height/finish', { play_id: s.data.playId, hits: 999 });
   assert.equal(f.status, 200);
-  // ceil(~0/1000)*3*10 = at most 30m for the first partial second; nowhere near 300
-  assert.ok(f.data.added <= 30, `instant finish credited ${f.data.added}m (<=30 expected)`);
+  // ceil(~0/1000)*3*10 = 30m base for the first partial second, ×1.15 jitter ceiling = 35; nowhere near 300
+  assert.ok(f.data.added <= 35, `instant finish credited ${f.data.added}m (<=35 expected)`);
   assert.ok(f.data.added < 300, 'instant finish no longer yields full 300m');
   assert.equal(lanternHeight(srv.dbPath, lid), f.data.added);
 });

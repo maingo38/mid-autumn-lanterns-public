@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <title>Bầu trời lồng đèn</title>
 <style>
+  @font-face{ font-family:'Be Vietnam Pro'; font-style:normal; font-weight:400; font-display:swap; src:url('/fonts/bvp-400.woff2') format('woff2'); }
+  @font-face{ font-family:'Be Vietnam Pro'; font-style:normal; font-weight:700; font-display:swap; src:url('/fonts/bvp-700.woff2') format('woff2'); }
+  @font-face{ font-family:'Be Vietnam Pro'; font-style:normal; font-weight:800; font-display:swap; src:url('/fonts/bvp-800.woff2') format('woff2'); }
   html,body{margin:0;height:100%;overflow:hidden;background:#0a0620;}
   canvas{display:block;}
 
@@ -11,12 +14,20 @@
              background:#8a1a12cc; color:#ffe9b0; border:1px solid #ffd77a; border-radius:20px;
              padding:8px 16px; font:600 14px system-ui,sans-serif; box-shadow:0 4px 16px #0007; }
 
-  /* dòng đếm số lồng đèn — góc trên bên trái, chữ trắng, IN HOA, cỡ nhỏ */
-  #countBar{ position:fixed; left:22px; top:20px; z-index:8;
-             color:#fff; font:700 15px system-ui,sans-serif; text-transform:uppercase;
-             line-height:1.35; letter-spacing:.4px; text-align:left;
-             text-shadow:0 2px 8px #000a; pointer-events:none; }
-  #countBar b{ color:#fff; }
+  /* dòng đếm số lồng đèn — góc DƯỚI bên trái, chữ ấm kiểu đèn lồng, phát sáng nhịp nhàng theo theme */
+  #countBar{ position:fixed; left:26px; bottom:26px; z-index:8;
+             font-family:'Be Vietnam Pro',system-ui,sans-serif; font-weight:800; font-size:22px;
+             line-height:1.3; letter-spacing:.3px; text-align:left; pointer-events:none;
+             color:#ffe9b0; text-shadow:0 2px 10px #000a;
+             animation:countGlow 2.6s ease-in-out infinite; }
+  /* con số nổi bật: gradient vàng→cam ấm như ánh nến trong lồng đèn */
+  #countBar b{ font-size:30px; font-weight:800;
+    background:linear-gradient(180deg,#fff2c0,#ffcf6a 45%,#ff9a1a);
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+    filter:drop-shadow(0 0 10px #ffb43a88); }
+  /* nhịp sáng nhẹ đồng bộ cảm giác đèn lồng lung linh */
+  @keyframes countGlow{ 0%,100%{ text-shadow:0 2px 10px #000a, 0 0 14px #ffb43a44; opacity:.94 }
+    50%{ text-shadow:0 2px 10px #000a, 0 0 26px #ffb43a99; opacity:1 } }
 
   /* nút toàn màn hình — góc phải trên, kín đáo, không che canvas */
   #fsBtn{ position:fixed; right:18px; top:18px; z-index:12;
@@ -61,6 +72,7 @@
     68%    { --g1:30px; --g2:70px; --g3:120px; --b:1.3;  opacity:1 }
     84%    { --g1:22px; --g2:48px; --g3:84px; --b:1.12; opacity:.97 }
   }
+
   /* QR góc phải dưới — khung tre cắt từ demo.jpeg, QR thật đặt đè lên ô trắng */
   #qrCard{ position:fixed; right:48px; bottom:60px; z-index:10; width:160px;
            text-align:center; font-family:system-ui,sans-serif;

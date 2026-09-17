@@ -851,7 +851,12 @@ app.post('/api/height/finish', requireAuth, (req, res) => {
   const elapsedMs = Math.max(0, Math.min(now - play.started_at, HEIGHT_CFG.durationMs));
   const timeHits = Math.ceil(elapsedMs / 1000) * HEIGHT_CFG.maxHitsPerSec;
   const capped = Math.min(hits, HEIGHT_CFG.maxHits, timeHits);
-  const added = Math.min(capped * HEIGHT_CFG.metersPerHit, HEIGHT_CFG.maxMeters);
+  // mét theo nỗ lực (0..maxMeters=300), rồi rắc jitter ±15% để các lượt nỗ lực
+  // bằng nhau KHÔNG ra số trùng khít -> bảng xếp hạng hết dồn cục bội số 300,
+  // nhìn đa dạng mà vẫn công bằng theo lửa. Nỗ lực = 0 thì vẫn 0 (không quạt = không bay).
+  // ponytail: jitter cố định ±15%; muốn thưởng kỹ năng rõ hơn thì nới trần hits.
+  const base = capped * HEIGHT_CFG.metersPerHit;
+  const added = base <= 0 ? 0 : Math.round(base * (0.85 + Math.random() * 0.30));
   const tx = db.transaction(() => {
     db.prepare('UPDATE height_plays SET finalized=1, meters=? WHERE id=?').run(added, playId);
     db.prepare('UPDATE lanterns SET height=height+? WHERE id=?').run(added, play.lantern_id);
