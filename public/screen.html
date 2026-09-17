@@ -166,7 +166,7 @@ const CONFIG = {
   bokeh:         true,    // đốm sáng mờ lơ lửng (chiều sâu)
   bokehCount:    18,
   shootingStars: true,    // sao băng thỉnh thoảng vụt qua
-  water:         true,    // mặt nước lung linh + phản chiếu ở đáy màn
+  water:         false,   // mặt nước lung linh + phản chiếu ở đáy màn (tắt: bỏ lớp mờ/bóng dưới)
   candleFlicker: true,    // ánh nến lập loè bên trong mỗi lồng đèn
   vignette:      true,    // tối nhẹ 4 góc cho chất điện ảnh
 };
@@ -175,7 +175,19 @@ const CONFIG = {
 const canvas = document.getElementById('sky');
 const ctx = canvas.getContext('2d');
 let W, H;
-function resize(){ W = canvas.width = innerWidth; H = canvas.height = innerHeight; }
+// Backing store bị GIỚI HẠN ở tối đa 1080p (theo tỉ lệ màn), rồi CSS kéo full màn.
+// TV 4K: vẽ ~2.1M pixel/frame thay vì ~8.3M -> giảm 4× fill, hết lag; GPU tự
+// upscale khi hiển thị (rẻ). Hit-test (dòng ~235) đã scale theo W/r.width nên
+// click không lệch. Đổi CAP nếu muốn nét hơn (đánh đổi mượt).
+const RENDER_CAP = 1080;   // chiều nhỏ nhất tối đa của backing store
+function resize(){
+  const vw = innerWidth, vh = innerHeight;
+  const scale = Math.min(1, RENDER_CAP / Math.min(vw, vh));   // chỉ thu, không phóng
+  W = canvas.width  = Math.round(vw * scale);
+  H = canvas.height = Math.round(vh * scale);
+  canvas.style.width = vw + 'px';
+  canvas.style.height = vh + 'px';
+}
 resize(); addEventListener('resize', resize);
 
 // nền ảnh cover + parallax nhẹ tạo cảm giác 3D chiều sâu
