@@ -38,15 +38,26 @@ function seedFire(dbPath, sub, fire) {
 }
 
 // Insert a height_plays row of a given kind (to simulate used free plays, etc.).
-function seedPlay(dbPath, sub, lanternId, { kind = 'paid', day = todayVN(), finalized = 1, meters = 0, requestId } = {}) {
+function seedPlay(dbPath, sub, lanternId, { kind = 'paid', day = todayVN(), finalized = 1, meters = 0, requestId, startedAt, endsAt } = {}) {
   return withDb(dbPath, db => {
     const now = Date.now();
+    const started = startedAt ?? now;
+    const ends = endsAt ?? (started + 10000);
     const rid = requestId || ('seed_' + Math.random().toString(36).slice(2));
     const info = db.prepare(
       'INSERT INTO height_plays (user_sub, lantern_id, day, request_id, started_at, ends_at, finalized, meters, created, kind) ' +
       'VALUES (?,?,?,?,?,?,?,?,?,?)'
-    ).run(sub, lanternId, day, rid, now, now + 10000, finalized ? 1 : 0, meters, now, kind);
+    ).run(sub, lanternId, day, rid, started, ends, finalized ? 1 : 0, meters, now, kind);
     return info.lastInsertRowid;
+  });
+}
+
+// Force a play to look abandoned: expired window, not finalized.
+function expirePlay(dbPath, playId) {
+  withDb(dbPath, db => {
+    const now = Date.now();
+    db.prepare('UPDATE height_plays SET started_at=?, ends_at=?, finalized=0 WHERE id=?')
+      .run(now - 60000, now - 50000, playId);
   });
 }
 
@@ -59,4 +70,4 @@ function countPlays(dbPath, sub, where = '') {
     db.prepare(`SELECT COUNT(*) AS n FROM height_plays WHERE user_sub=? ${where}`).get(sub).n);
 }
 
-module.exports = { seedLantern, seedFire, seedPlay, lanternHeight, countPlays, todayVN };
+module.exports = { seedLantern, seedFire, seedPlay, expirePlay, lanternHeight, countPlays, todayVN };

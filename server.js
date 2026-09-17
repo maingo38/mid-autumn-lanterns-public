@@ -313,8 +313,11 @@ function wallet(voter, day) {
   const gameEarned   = db.prepare('SELECT COALESCE(SUM(reward),0) AS n FROM games WHERE voter=?').get(voter).n;
   const earned = spinEarned + puzzleEarned + gameEarned;
   // fire spent = CHỈ các lượt quạt trả bằng lửa (kind='paid') × giá mỗi lượt.
-  // Lượt free (release/daily) không tiêu lửa.
-  const paidPlays = db.prepare("SELECT COUNT(*) AS n FROM height_plays WHERE user_sub=? AND kind='paid'").get(voter).n;
+  // Lượt free (release/daily) không tiêu lửa. Lượt paid BỎ DỞ (hết hạn mà chưa
+  // finalized) được HOÀN lửa: chỉ tính lượt đã chốt hoặc còn đang chạy.
+  const paidPlays = db.prepare(
+    "SELECT COUNT(*) AS n FROM height_plays WHERE user_sub=? AND kind='paid' AND (finalized=1 OR ends_at>?)"
+  ).get(voter, Date.now()).n;
   const spent  = paidPlays * FIRE_PER_FAN;
   // lượt quạt MIỄN PHÍ: 1 lần khi thả đèn (release) + 1 lần mỗi ngày (daily).
   const hasLantern = !!db.prepare("SELECT 1 FROM lanterns WHERE user_sub=? AND status='approved'").get(voter);
@@ -838,8 +841,12 @@ app.post('/api/height/finish', requireAuth, (req, res) => {
     return res.json({ ok: true, added: play.meters, total: lant ? lant.height : 0,
       playsLeft: wallet(sub, today()).fanPlays, already: true });
   }
-  // chặn trần hits theo thời lượng, đổi ra mét
-  const capped = Math.min(hits, HEIGHT_CFG.maxHits);
+  // chặn trần hits: vừa theo trần tuyệt đối, vừa theo THỜI GIAN thực đã trôi
+  // (chống gửi finish tức thì với hits tối đa). Cho phép trần theo số giây đã
+  // qua kể từ started_at, kẹp trong thời lượng lượt chơi.
+  const elapsedMs = Math.max(0, Math.min(now - play.started_at, HEIGHT_CFG.durationMs));
+  const timeHits = Math.ceil(elapsedMs / 1000) * HEIGHT_CFG.maxHitsPerSec;
+  const capped = Math.min(hits, HEIGHT_CFG.maxHits, timeHits);
   const added = Math.min(capped * HEIGHT_CFG.metersPerHit, HEIGHT_CFG.maxMeters);
   const tx = db.transaction(() => {
     db.prepare('UPDATE height_plays SET finalized=1, meters=? WHERE id=?').run(added, playId);
@@ -867,7 +874,7 @@ app.get('/api/wallet', (req, res) => {
 // testing toggle: ON = play every game unlimited times; OFF = once per day.
 // Server-wide (affects everyone) and resets to the env default on restart.
 app.get('/api/testing', (req, res) => res.json({ testing: GAMES_UNLIMITED }));
-app.post('/api/testing', (req, res) => {
+app.post('/api/testing', requireAdmin, (req, res) => {
   GAMES_UNLIMITED = !!(req.body && req.body.on);
   res.json({ testing: GAMES_UNLIMITED });
 });

@@ -90,10 +90,12 @@ test('C-4 concurrent FINISH same play adds height once (tx + finalized)', async 
     u.call('POST', '/api/height/finish', { play_id: s.data.playId, hits: 10 }),
   ]);
   const st = await u.call('GET', '/api/height/state');
-  // one real add (100m), the other must be 'already' or re-add 0. Height == 100.
-  assert.equal(st.data.height, 100, 'height added exactly once');
-  const added = [f1, f2].map(x => x.data.added);
-  assert.ok(added.includes(100), 'one finish applied 100m');
+  // exactly one finish applies; the other returns already:true and re-adds nothing.
+  // (amount is time-gated, so just assert the two agree and no double-count.)
+  const applied = f1.data.already ? f2.data : f1.data;
+  const dup = f1.data.already ? f1.data : f2.data;
+  assert.ok(dup.already === true, 'second concurrent finish is idempotent (already)');
+  assert.equal(st.data.height, applied.added, 'height reflects exactly one finish');
 });
 
 // C-5 — same request_id concurrently -> UNIQUE keeps a single row.
