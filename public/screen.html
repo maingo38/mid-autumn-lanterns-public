@@ -84,6 +84,54 @@
   #qrCard .tt{ color:#fff; font-weight:700; font-size:15px; margin-top:-6px; letter-spacing:.2px; white-space:nowrap;
     text-shadow:0 2px 8px #000a; }
 
+  /* ── Grand entrance: đèn mới hiện giữa màn ~3.5s rồi nhập bầu trời.
+     TẤT CẢ bằng CSS transform+opacity (compositor GPU) — không blur, JS không
+     vẽ mỗi frame -> không lag như bản canvas cũ. ── */
+  #entrance{ position:fixed; inset:0; z-index:40; pointer-events:none;
+    display:none; align-items:center; justify-content:center; }
+  #entrance.show{ display:flex; }
+  #entDim{ position:absolute; inset:0; background:rgba(5,3,20,0.55);
+    opacity:0; animation:entDim 3.5s ease-in-out forwards; }
+  #entStage{ position:relative; display:flex; flex-direction:column; align-items:center; }
+  /* tia sáng tỏa: conic-gradient nan quạt, xoay bằng transform (không blur) */
+  #entRays{ position:absolute; left:50%; top:0; width:120vh; height:120vh;
+    transform:translate(-50%,-50%); z-index:-2; opacity:0;
+    background:conic-gradient(from 0deg,
+      rgba(255,220,130,0) 0deg, rgba(255,220,130,.28) 6deg, rgba(255,220,130,0) 12deg,
+      rgba(255,220,130,0) 18deg, rgba(255,220,130,.28) 24deg, rgba(255,220,130,0) 30deg,
+      rgba(255,220,130,0) 36deg, rgba(255,220,130,.28) 42deg, rgba(255,220,130,0) 48deg,
+      rgba(255,220,130,0) 54deg, rgba(255,220,130,.28) 60deg, rgba(255,220,130,0) 66deg,
+      rgba(255,220,130,0) 72deg, rgba(255,220,130,.28) 78deg, rgba(255,220,130,0) 84deg,
+      rgba(255,220,130,0) 90deg, rgba(255,220,130,.28) 96deg, rgba(255,220,130,0) 102deg,
+      rgba(255,220,130,0) 108deg,rgba(255,220,130,.28) 114deg,rgba(255,220,130,0) 120deg,
+      rgba(255,220,130,0) 126deg,rgba(255,220,130,.28) 132deg,rgba(255,220,130,0) 138deg,
+      rgba(255,220,130,0) 144deg,rgba(255,220,130,.28) 150deg,rgba(255,220,130,0) 156deg,
+      rgba(255,220,130,0) 162deg,rgba(255,220,130,.28) 168deg,rgba(255,220,130,0) 174deg,
+      rgba(255,220,130,0) 180deg,rgba(255,220,130,.28) 186deg,rgba(255,220,130,0) 192deg,
+      rgba(255,220,130,0) 300deg,rgba(255,220,130,.28) 306deg,rgba(255,220,130,0) 312deg,
+      rgba(255,220,130,0) 360deg);
+    -webkit-mask:radial-gradient(circle, #000 0%, #000 12%, transparent 60%);
+            mask:radial-gradient(circle, #000 0%, #000 12%, transparent 60%);
+    animation:entRays 3.5s ease-in-out forwards; }
+  #entGlow{ position:absolute; left:50%; top:0; width:60vh; height:60vh;
+    transform:translate(-50%,-50%); z-index:-1; opacity:0;
+    background:radial-gradient(circle, rgba(255,225,150,0.75) 0%, rgba(255,190,90,0.35) 40%, rgba(255,160,60,0) 70%);
+    animation:entGlow 3.5s ease-in-out forwards; }
+  #entImg{ height:34vh; width:auto; display:block; transform:scale(0.2); opacity:0;
+    animation:entPop 3.5s cubic-bezier(.16,1,.3,1) forwards; }
+  #entName{ margin-top:2vh; text-align:center; opacity:0; animation:entText 3.5s ease-out forwards; }
+  #entName .nm{ font:800 4.2vh 'Be Vietnam Pro',system-ui,sans-serif; color:#fff; text-shadow:0 2px 12px #000a; }
+  #entName .sub{ font:600 2.2vh 'Be Vietnam Pro',system-ui,sans-serif; color:#ffd77a; margin-top:.6vh; }
+  #entName .ws{ font:italic 500 2.4vh Georgia,serif; color:#fff; margin-top:.6vh; text-shadow:0 2px 10px #000a; }
+  @keyframes entDim{ 0%{opacity:0} 12%{opacity:1} 80%{opacity:1} 100%{opacity:0} }
+  @keyframes entRays{ 0%{opacity:0; transform:translate(-50%,-50%) rotate(0deg)}
+    25%{opacity:.5} 70%{opacity:.4} 100%{opacity:0; transform:translate(-50%,-50%) rotate(60deg)} }
+  @keyframes entGlow{ 0%{opacity:0; transform:translate(-50%,-50%) scale(.6)}
+    25%{opacity:1; transform:translate(-50%,-50%) scale(1)} 80%{opacity:.9} 100%{opacity:0} }
+  @keyframes entPop{ 0%{opacity:0; transform:scale(.2)} 18%{opacity:1; transform:scale(1.06)}
+    28%{transform:scale(1)} 80%{opacity:1; transform:scale(1.02)} 100%{opacity:0; transform:scale(1.05)} }
+  @keyframes entText{ 0%{opacity:0} 20%{opacity:0} 34%{opacity:1} 82%{opacity:1} 100%{opacity:0} }
+
   /* Bảng đo hiệu năng — chỉ hiện khi /screen?fps=1 */
   #perfPanel{ display:none; position:fixed; left:50%; top:60px; transform:translateX(-50%); z-index:70;
      background:#0a0620dd; color:#ffe9b0; border:1px solid #ffd77a; border-radius:14px; padding:10px 14px;
@@ -111,6 +159,17 @@
 <div id="qrCard">
   <div id="qrLantern"></div>
   <div class="tt">Scan để tạo lồng đèn</div>
+</div>
+
+<!-- Grand entrance đèn mới (CSS thuần) -->
+<div id="entrance">
+  <div id="entDim"></div>
+  <div id="entStage">
+    <div id="entRays"></div>
+    <div id="entGlow"></div>
+    <img id="entImg" alt="">
+    <div id="entName"></div>
+  </div>
 </div>
 
 <div id="perfPanel">
@@ -428,12 +487,49 @@ fetch('/api/recent').then(r=>r.json()).then(list => {
   });
 }).catch(()=>{});
 
-// ── Realtime: đèn mới -> vào thẳng bầu trời ──
+// ── Realtime: đèn mới -> GRAND ENTRANCE (CSS) rồi nhập bầu trời ──
+const ENTRANCE_MS = 3500;
+const entranceQ = [];
+let entranceBusy = false;
+const entEl   = document.getElementById('entrance');
+const entImg  = document.getElementById('entImg');
+const entName = document.getElementById('entName');
+const entRays = document.getElementById('entRays');
+const entGlow = document.getElementById('entGlow');
+const entDim  = document.getElementById('entDim');
+
+function restartAnim(el){ el.style.animation = 'none'; void el.offsetWidth; el.style.animation = ''; }
+
+function runEntrance(rec){
+  entranceBusy = true;
+  const src = '/lanterns/' + rec.file;
+  entImg.src = src;
+  entName.innerHTML =
+    (rec.name ? `<div class="nm">🏮 ${escapeHtml(rec.name)}</div>` : '') +
+    `<div class="sub">${rec.wish ? 'gửi một điều ước lên trời…' : 'vừa thả một chiếc lồng đèn!'}</div>` +
+    (rec.wish ? `<div class="ws">“${escapeHtml(rec.wish)}”</div>` : '');
+  entEl.classList.add('show');
+  [entDim, entRays, entGlow, entImg, entName].forEach(restartAnim);
+  setTimeout(() => {
+    entEl.classList.remove('show');
+    // giao cho bầu trời
+    const l = releaseToSky(src, rec.name || '', rec.wish || '', 1);
+    l.z = 0.06; l.phase = Math.random()*Math.PI*2;
+    entranceBusy = false;
+    pumpEntrance();
+  }, ENTRANCE_MS);
+}
+function pumpEntrance(){
+  if (entranceBusy || !entranceQ.length) return;
+  runEntrance(entranceQ.shift());
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
 const socket = io();
 socket.on('new-lantern', rec => {
   if (!rec || !rec.file) return;
-  const l = releaseToSky('/lanterns/' + rec.file, rec.name || '', rec.wish || '', 1);
-  l.z = 0.06; l.phase = Math.random()*Math.PI*2;
+  entranceQ.push(rec);
+  pumpEntrance();
 });
 
 // ── Bộ đếm ──
