@@ -1026,7 +1026,7 @@ app.post('/confirm', (req, res) => {
   const { id, wish } = req.body || {};
   const row = db.prepare('SELECT * FROM lanterns WHERE id=?').get(id);
   if (!row) return res.status(404).json({ error: 'not found' });
-  const w = (wish || '').toString().trim().slice(0, 140) || null;
+  const w = (wish || '').toString().trim().slice(0, 40) || null;
   db.prepare("UPDATE lanterns SET status='ready', wish=? WHERE id=?").run(w, id);
   res.json({ ok: true });
 });

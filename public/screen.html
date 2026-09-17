@@ -769,10 +769,18 @@ function frame(t){
       ctx.globalAlpha = alpha*0.9;
       ctx.translate(cx, cy + ih*0.62);
       ctx.textAlign='center';
-      ctx.font=`600 ${Math.max(11, Math.round(ih*0.12))}px system-ui,sans-serif`;
       ctx.shadowColor='rgba(0,0,0,0.7)'; ctx.shadowBlur=6;
+      // tên (to, đậm)
+      const nameSize = Math.max(12, Math.round(ih*0.13));
+      ctx.font=`700 ${nameSize}px system-ui,sans-serif`;
       ctx.fillStyle='#ffe9b0';
       ctx.fillText(l.name, 0, 0);
+      // câu chúc trong ngoặc kép, chữ nhỏ hơn tên
+      if (l.wish){
+        ctx.font=`italic 500 ${Math.round(nameSize*0.72)}px Georgia,serif`;
+        ctx.fillStyle='#c9bfff';
+        ctx.fillText('“'+l.wish+'”', 0, nameSize*1.15);
+      }
       ctx.restore();
     }
 
