@@ -375,11 +375,22 @@
   #mineArt{ position:relative; z-index:1; width:100%; height:100%; object-fit:contain; border-radius:6px;
     filter:drop-shadow(0 8px 20px #0008) drop-shadow(0 0 22px #ffcf6a66); }
   /* cây quạt dưới lồng đèn — mặc định đứng yên; .fanning khi đang lắc */
-  #fanEmoji{ font-size:52px; margin:6px auto 0; width:max-content; transform-origin:50% 90%;
+  .fanWrap{ position:relative; width:max-content; margin:6px auto 0; }
+  #fanEmoji{ font-size:88px; width:max-content; transform-origin:50% 90%;
     transition:transform .08s ease; filter:drop-shadow(0 4px 10px #0006); }
   #fanEmoji.fanning{ animation:fanWave .32s ease-in-out infinite; }
   @keyframes fanWave{ 0%,100%{ transform:rotate(-24deg) } 50%{ transform:rotate(24deg) } }
   @media (prefers-reduced-motion: reduce){ #fanEmoji.fanning{ animation:none } }
+  /* icon gió bắn quanh quạt + icon bay quanh lồng đèn khi lắc */
+  .windP,.flyP{ position:absolute; left:50%; top:50%; pointer-events:none; z-index:3;
+    transform:translate(-50%,-50%); opacity:0; will-change:transform,opacity; }
+  .windP{ font-size:26px; animation:windFly .6s ease-out forwards; }
+  .flyP{ font-size:22px; animation:flyFloat .9s ease-out forwards; }
+  @keyframes windFly{ 0%{ opacity:0; transform:translate(-50%,-50%) scale(.4) }
+    20%{ opacity:1 } 100%{ opacity:0; transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) scale(1.15) } }
+  @keyframes flyFloat{ 0%{ opacity:0; transform:translate(-50%,-50%) scale(.3) }
+    25%{ opacity:1 } 100%{ opacity:0; transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) scale(1) rotate(var(--rot)) } }
+  @media (prefers-reduced-motion: reduce){ .windP,.flyP{ display:none } }
   @keyframes mineFloat{ 0%,100%{ transform:translateY(0) } 50%{ transform:translateY(-6px) } }
   .mineDots{ display:flex; flex-direction:column; align-items:center; gap:14px; margin:14px 0 18px; }
   .mineDots i{ width:7px; height:7px; border-radius:50%; background:#ffd166; }
@@ -620,7 +631,7 @@
       <img id="mineArt" alt="Lồng đèn của bạn">
     </div>
     <!-- cây quạt: lắc điện thoại -> quạt phe phẩy tạo gió -->
-    <div id="fanEmoji" aria-hidden="true">🪭</div>
+    <div class="fanWrap" id="fanWrap"><div id="fanEmoji" aria-hidden="true">🪭</div></div>
     <div class="mineDots"><i></i><i></i><i></i><i></i><i></i></div>
 
     <!-- skeleton khi tải -->
@@ -887,6 +898,24 @@ function registerHit(){
     fan.classList.add('fanning');
     clearTimeout(fanWaveTimer);
     fanWaveTimer = setTimeout(()=>fan.classList.remove('fanning'), 400);
+  }
+  spawnParticles(document.getElementById('fanWrap'), 'windP', ['💨','🌬️'], 3, 70);
+  spawnParticles(l, 'flyP', ['✨','🍃','🌸','⭐'], 3, 90);
+}
+// bắn vài icon bay ra xung quanh 1 phần tử rồi tự xoá sau khi animation xong
+function spawnParticles(host, cls, icons, count, spread){
+  if (!host) return;
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  for (let i=0;i<count;i++){
+    const p = document.createElement('div');
+    p.className = cls;
+    p.textContent = icons[(Math.random()*icons.length)|0];
+    const ang = Math.random()*Math.PI*2, dist = spread*(0.6+Math.random()*0.6);
+    p.style.setProperty('--dx', Math.cos(ang)*dist + 'px');
+    p.style.setProperty('--dy', Math.sin(ang)*dist + 'px');
+    if (cls==='flyP') p.style.setProperty('--rot', (Math.random()*120-60) + 'deg');
+    host.appendChild(p);
+    p.addEventListener('animationend', ()=>p.remove(), { once:true });
   }
 }
 function onMotion(e){
