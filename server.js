@@ -556,6 +556,11 @@ app.get('/screen2', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'screen2.html'));
 });
 
+// EXPERIMENTAL big screen — bản DOM (bỏ canvas): đèn bay bằng transform/opacity cho TV yếu
+app.get('/screen3', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'screen3.html'));
+});
+
 // friendly URL for the standalone QR page (own tab / second monitor / print)
 app.get('/qr', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'qr.html'));

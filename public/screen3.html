@@ -2,13 +2,10 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8">
-<title>Bầu trời lồng đèn</title>
+<title>Bầu trời lồng đèn (DOM)</title>
 <style>
-  @font-face{ font-family:'Be Vietnam Pro'; font-style:normal; font-weight:400; font-display:swap; src:url('/fonts/bvp-400.woff2') format('woff2'); }
-  @font-face{ font-family:'Be Vietnam Pro'; font-style:normal; font-weight:700; font-display:swap; src:url('/fonts/bvp-700.woff2') format('woff2'); }
-  @font-face{ font-family:'Be Vietnam Pro'; font-style:normal; font-weight:800; font-display:swap; src:url('/fonts/bvp-800.woff2') format('woff2'); }
-  html,body{margin:0;height:100%;overflow:hidden;background:#0a0620;font-family:'Be Vietnam Pro',system-ui,sans-serif;}
-  /* Nền + vignette = lớp DOM (compositor GPU) — không vẽ lại mỗi frame. */
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a0620;font-family:system-ui,sans-serif;}
+  /* Nền + vignette = lớp DOM (compositor GPU). Parallax bằng transform. */
   #bgLayer{ position:fixed; inset:0; z-index:0;
     background:url('/decor/Background.jpeg') center/cover no-repeat #0a0620; }
   #bgVig{ position:fixed; inset:0; z-index:1; pointer-events:none;
@@ -29,59 +26,19 @@
   .lantern img{ display:block; width:100%; height:auto; }
   .lantern .cap{ position:absolute; left:50%; top:100%; transform:translateX(-50%);
      text-align:center; line-height:1.25; text-shadow:0 2px 8px #000c; white-space:nowrap; margin-top:4px; }
-  .lantern .nm{ font:700 15px 'Be Vietnam Pro',system-ui,sans-serif; color:#ffe9b0; }
+  .lantern .nm{ font:700 15px system-ui,sans-serif; color:#ffe9b0; }
   .lantern .ws{ font:italic 500 13px Georgia,serif; color:#e9e0ff; }
   @keyframes flick{ 0%,100%{opacity:.55} 45%{opacity:1} 70%{opacity:.72} }
 
-  #audioTip{ position:fixed; left:50%; top:18px; transform:translateX(-50%); z-index:56;
-             background:#8a1a12cc; color:#ffe9b0; border:1px solid #ffd77a; border-radius:20px;
-             padding:8px 16px; font:600 14px system-ui,sans-serif; box-shadow:0 4px 16px #0007; }
-
   #fsBtn{ position:fixed; right:18px; top:18px; z-index:60;
           background:#1a0f3ccc; color:#ffe9b0; border:1px solid #ffd77a; border-radius:20px;
-          padding:8px 14px; font:600 14px system-ui,sans-serif; cursor:pointer; box-shadow:0 4px 16px #0007; transition:opacity .4s; }
-  #fsBtn:hover{ opacity:1 !important; }
+          padding:8px 14px; font:600 14px system-ui,sans-serif; cursor:pointer; box-shadow:0 4px 16px #0007; }
 
-  /* dòng đếm số lồng đèn — góc DƯỚI trái, phát sáng nhịp nhàng */
-  #countBar{ position:fixed; left:26px; bottom:26px; z-index:55;
-     font-family:'Be Vietnam Pro',system-ui,sans-serif; font-weight:800; font-size:22px;
-     line-height:1.3; letter-spacing:.3px; text-align:left; pointer-events:none;
-     color:#ffe9b0; text-shadow:0 2px 10px #000a; animation:countGlow 2.6s ease-in-out infinite; }
-  #countBar b{ font-size:30px; font-weight:800;
-     background:linear-gradient(180deg,#fff2c0,#ffcf6a 45%,#ff9a1a);
-     -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
-     filter:drop-shadow(0 0 10px #ffb43a88); }
-  @keyframes countGlow{ 0%,100%{ text-shadow:0 2px 10px #000a, 0 0 14px #ffb43a44; opacity:.94 }
-    50%{ text-shadow:0 2px 10px #000a, 0 0 26px #ffb43a99; opacity:1 } }
+  #countBar{ position:fixed; left:26px; bottom:26px; z-index:8;
+     font-weight:800; font-size:22px; color:#ffe9b0; text-shadow:0 2px 10px #000a; pointer-events:none; }
+  #countBar b{ font-size:30px; color:#ffcf6a; }
 
-  /* Lồng đèn VML góc trái-trên — treo lơ lửng, sáng nhấp nháy (1 phần tử -> mượt) */
-  #vmlLantern{ position:fixed; left:30px; top:24px; z-index:55; width:15vh; max-width:150px;
-    pointer-events:none; transform-origin:50% 8%;
-    animation:vmlSway 4.6s ease-in-out infinite; }
-  #vmlLantern img{ display:block; width:100%; height:auto;
-    filter:drop-shadow(0 0 var(--g1,20px) #fff2c0) drop-shadow(0 0 var(--g2,44px) #ffb43acc)
-           drop-shadow(0 0 var(--g3,80px) #ff7a1a88) drop-shadow(0 8px 18px #0008)
-           brightness(var(--b,1));
-    animation:vmlGlow 2s ease-in-out infinite; }
-  @keyframes vmlSway{ 0%,100%{ transform:rotate(-2.5deg) translateY(0) } 50%{ transform:rotate(2.5deg) translateY(-6px) } }
-  @keyframes vmlGlow{
-    0%,100%{ --g1:18px; --g2:36px; --g3:64px; --b:1;    opacity:.92 }
-    30%    { --g1:26px; --g2:60px; --g3:104px; --b:1.22; opacity:1 }
-    48%    { --g1:20px; --g2:42px; --g3:76px; --b:1.05; opacity:.95 }
-    68%    { --g1:30px; --g2:70px; --g3:120px; --b:1.3;  opacity:1 }
-    84%    { --g1:22px; --g2:48px; --g3:84px; --b:1.12; opacity:.97 }
-  }
-
-  /* QR góc phải dưới — khung tre (QR đã in sẵn trong ảnh) */
-  #qrCard{ position:fixed; right:48px; bottom:60px; z-index:55; width:160px;
-           text-align:center; font-family:system-ui,sans-serif;
-           filter:drop-shadow(0 0 30px #ff9a1a55); }
-  #qrLantern{ position:relative; width:160px; height:160px; margin:0 auto;
-    background:url('/decor/qr-cube-final.png') center/contain no-repeat; }
-  #qrCard .tt{ color:#fff; font-weight:700; font-size:15px; margin-top:-6px; letter-spacing:.2px; white-space:nowrap;
-    text-shadow:0 2px 8px #000a; }
-
-  /* Bảng đo hiệu năng — chỉ hiện khi /screen?fps=1 */
+  /* Bảng đo hiệu năng — chỉ hiện khi /screen3?fps=1 */
   #perfPanel{ display:none; position:fixed; left:50%; top:60px; transform:translateX(-50%); z-index:70;
      background:#0a0620dd; color:#ffe9b0; border:1px solid #ffd77a; border-radius:14px; padding:10px 14px;
      font:600 14px system-ui,sans-serif; box-shadow:0 4px 16px #0009; text-align:center; }
@@ -97,18 +54,8 @@
 <div id="stage"></div>
 <div id="frameVig"></div>
 
-<div id="audioTip">🔊 Chạm một lần để bật âm thanh</div>
 <button id="fsBtn" onclick="toggleFullscreen()">⛶ Toàn màn hình</button>
 <div id="countBar">Đã có hơn <b id="countN">…</b> lồng đèn<br>được thả tại VML Việt Nam</div>
-
-<!-- Lồng đèn VML góc trái-trên -->
-<div id="vmlLantern"><img src="/decor/vml-lantern.png" alt="Lồng đèn VML"></div>
-
-<!-- QR góc phải dưới -->
-<div id="qrCard">
-  <div id="qrLantern"></div>
-  <div class="tt">Scan để tạo lồng đèn</div>
-</div>
 
 <div id="perfPanel">
   <div id="fpsReadout">-- fps</div>
@@ -118,9 +65,9 @@
 <script src="/socket.io/socket.io.js"></script>
 <script>
 // ══════════════════════════════════════════════════════════════════
-//  BẢN DOM (bỏ canvas): mỗi lồng đèn là 1 phần tử DOM, di chuyển CHỈ bằng
-//  transform + opacity -> chạy trên compositor GPU (mượt trên TV yếu).
-//  KHÔNG dùng filter/blur cho đèn. Nền + vignette là lớp DOM tĩnh.
+//  /screen3 — BẢN DOM: bỏ canvas hoàn toàn. Mỗi lồng đèn là 1 phần tử
+//  DOM, di chuyển CHỈ bằng transform + opacity -> chạy trên compositor
+//  GPU của TV (giống logo lồng đèn vốn đã mượt). KHÔNG dùng filter/blur.
 // ══════════════════════════════════════════════════════════════════
 const CONFIG = {
   maxLanterns: 40,
@@ -142,28 +89,15 @@ const rand = (a,b) => a + Math.random()*(b-a);
 const STEP_MS = 1000/30;
 let _lastStep = 0;
 
-// ── Giới hạn HIỂN THỊ đồng thời: tối đa 100 đèn trên màn. Nếu pool đông hơn,
-// ẩn bớt NGẪU NHIÊN số dư; định kỳ XOAY VÒNG — đèn đang ẩn hiện lại, đèn khác
-// ẩn thay. Đèn 'nghỉ' được tạm dừng (không tiến z) nên hiện lại đúng chỗ cũ.
-const DISPLAY_CAP = 100;      // số đèn tối đa hiển thị cùng lúc
-const ROTATE_MS = 9000;       // mỗi 9s đổi lượt đèn ẩn/hiện
-let _lastRotate = 0;
-function rotateVisibility(t){
-  if (t - _lastRotate < ROTATE_MS) return;
-  _lastRotate = t;
-  const alive = lanterns.filter(x=>!x.leaving);
-  for (const l of alive) l.rest = false;            // đánh thức tất cả trước
-  const over = alive.length - DISPLAY_CAP;
-  if (over <= 0) return;
-  // xáo trộn Fisher–Yates rồi chọn `over` đèn cho nghỉ đợt này
-  for (let i=alive.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; const tmp=alive[i]; alive[i]=alive[j]; alive[j]=tmp; }
-  for (let i=0;i<over;i++) alive[i].rest = true;
-}
-
 // ── #1 Thu nhỏ ảnh khi ĐÔNG: giảm bộ nhớ/băng thông texture của TV yếu.
 // Thang bậc theo số đèn — càng đông càng nhỏ (đèn đông phần lớn ở xa, hiện
 // rất nhỏ nên hạ texture không ảnh hưởng mắt nhìn):
-//   <40 gốc · >=40 160px · >=80 100px · >=120 80px · >=160 64px · >=200 52px
+//   <40  -> ảnh gốc (nét)
+//   >=40 -> tối đa 160px
+//   >=80 -> tối đa 100px
+//   >=120 -> tối đa 80px
+//   >=160 -> tối đa 64px
+//   >=200 -> tối đa 52px
 // Trả 0 = giữ ảnh gốc. Downscale 1 lần/(src+size), cache theo cả kích thước.
 function targetMax(){
   const n = lanterns.filter(x=>!x.leaving).length;
@@ -176,9 +110,10 @@ function targetMax(){
 }
 
 // ── Zoom-out theo mật độ: càng đông -> mỗi đèn hiển thị nhỏ lại để có chỗ cho
-// nhiều đèn hơn. Hệ số toàn cục, nội suy 1.0 (ít) -> CROWD_MIN (đông), làm mượt.
-const CROWD_LO = 40, CROWD_HI = 200;
-const CROWD_MIN = 0.5;
+// nhiều đèn hơn. Hệ số toàn cục, nội suy theo số đèn từ 1.0 (ít) -> CROWD_MIN
+// (đông), rồi làm mượt dần mỗi frame để co/giãn êm khi số đèn đổi.
+const CROWD_LO = 40, CROWD_HI = 200;   // dải số đèn để nội suy
+const CROWD_MIN = 0.5;                  // ở >=200 đèn, mỗi đèn còn 50% cỡ
 let crowdScale = 1;
 function targetCrowdScale(){
   const n = lanterns.filter(x=>!x.leaving).length;
@@ -203,14 +138,15 @@ function makeSmall(fullSrc, max, cb){
   im.onerror = () => cb(fullSrc);
   im.src = fullSrc;
 }
+// gán src cho 1 đèn: đông -> ảnh nhỏ theo bậc, thưa -> ảnh gốc
 function setLanternSrc(dom, fullSrc){
   const max = targetMax();
   if (max) makeSmall(fullSrc, max, u => { dom.img.src = u; });
   else dom.img.src = fullSrc;
 }
 
-// ── #2 Rải tránh chụm: best-candidate — thử vài điểm, giữ điểm cách xa các đèn
-// hiện có nhất -> tản đều, ít đè lên nhau.
+// ── #2 Rải tránh chụm: chọn điểm bay theo 'best-candidate' — thử vài điểm ngẫu
+// nhiên, giữ điểm CÁCH XA các đèn hiện có nhất -> tản đều, ít đè lên nhau.
 function bestFar(xMin, xMax, yMin, yMax){
   let best = null, bestD = -1;
   for (let k=0; k<6; k++){
@@ -228,7 +164,7 @@ function bestFar(xMin, xMax, yMin, yMax){
 
 // Nền là ảnh tĩnh (CSS #bgLayer) — không parallax, không cập nhật mỗi frame.
 
-// ── Mô hình bay ──
+// ── Mô hình bay (giữ nguyên tinh thần /screen) ──
 let MAX = CONFIG.maxLanterns;
 const lanterns = [];
 let spotlight = null;
@@ -264,16 +200,21 @@ function promoteNewest(){
   while (near.length > NEAR_MAX){ const old = near.shift(); assignLayer(old,2); old.z = rand(0.4,0.8); }
 }
 
+// tạo phần tử DOM cho 1 đèn
 function makeEl(name, wish){
   const el = document.createElement('div'); el.className = 'lantern';
   const glow = document.createElement('div'); glow.className = 'glow';
   glow.style.animationDelay = (-Math.random()*2.4).toFixed(2)+'s';
   const img = document.createElement('img');
+  const el_ = el;
   el.appendChild(glow); el.appendChild(img);
+  let capNm=null, capWs=null;
   if (CONFIG.showNames && (name||wish)){
     const cap = document.createElement('div'); cap.className='cap';
-    if (name){ const nm = document.createElement('div'); nm.className='nm'; nm.textContent = name; cap.appendChild(nm); }
-    if (wish){ const ws = document.createElement('div'); ws.className='ws'; ws.textContent = '“'+wish+'”'; cap.appendChild(ws); }
+    capNm = document.createElement('div'); capNm.className='nm'; capNm.textContent = name||'';
+    capWs = document.createElement('div'); capWs.className='ws'; capWs.textContent = wish?('“'+wish+'”'):'';
+    if (name) cap.appendChild(capNm);
+    if (wish) cap.appendChild(capWs);
     el.appendChild(cap);
   }
   stage.appendChild(el);
@@ -282,8 +223,8 @@ function makeEl(name, wish){
 
 function releaseToSky(src, name, wish, layer){
   const dom = makeEl(name, wish);
-  dom.fullSrc = src;
-  setLanternSrc(dom, src);
+  dom.fullSrc = src;                  // giữ src gốc để clone/thay đổi độ nét sau
+  setLanternSrc(dom, src);            // #1: đông -> ảnh nhỏ, thưa -> gốc
   const l = {
     ...dom, name:name||'', wish:wish||'',
     ...newTrack(), z:0.08, zSpeed:rand(0.00055,0.00090),
@@ -302,6 +243,7 @@ function releaseToSky(src, name, wish, layer){
 
 function removeLantern(l){ if (l.el && l.el.parentNode) l.el.remove(); }
 
+// đổi trần số đèn tại chỗ (test)
 function setMaxLanterns(n){
   MAX = n;
   const alive = lanterns.filter(x=>!x.leaving);
@@ -337,16 +279,10 @@ function frame(t){
   if (t - _lastStep < STEP_MS) return;   // #3: giới hạn ~30fps
   _lastStep = t;
   fpsTick(t);
-  rotateVisibility(t);   // xoay vòng đèn ẩn/hiện khi pool > DISPLAY_CAP
   crowdScale += (targetCrowdScale() - crowdScale) * 0.05;   // zoom-out theo mật độ, làm mượt
 
   for (let i=lanterns.length-1; i>=0; i--){
     const l = lanterns[i];
-    // đèn đang 'nghỉ': ẩn hẳn, tạm dừng (không tiến z) -> hiện lại đúng chỗ cũ
-    if (l.rest && !l.leaving){
-      if (!l._hidden){ l.el.style.visibility = 'hidden'; l._hidden = true; }
-      continue;
-    }
     const isSpot = (l === spotlight);
     l.spot += ((isSpot?1:0) - l.spot) * CONFIG.spotEase;
 
@@ -382,31 +318,35 @@ function frame(t){
     }
 
     const zoom = 1 + l.spot*(CONFIG.spotZoom-1);
-    const crowd = crowdScale + (1 - crowdScale)*l.spot;   // đèn đang soi miễn zoom-out
-    const px = l.sizePx * pp * zoom * crowd;
-    const scale = px / l.sizePx;
+    // spotlight (đang soi) miễn zoom-out để đèn được soi vẫn to rõ
+    const crowd = crowdScale + (1 - crowdScale)*l.spot;
+    const px = l.sizePx * pp * zoom * crowd;         // bề rộng hiển thị thực
+    const scale = px / l.sizePx;                     // img gốc đặt width=sizePx, scale để mượt
     const rot = Math.sin(l.phase)*0.05*(1-l.spot);
 
+    // đặt width 1 lần (khi biết ảnh) — sau đó chỉ transform
     if (l.el.style.width === '') l.el.style.width = l.sizePx + 'px';
 
-    // #2: đèn quá mờ -> ẩn hẳn để compositor bỏ qua lớp
+    // #2: đèn quá mờ -> ẩn hẳn (visibility:hidden) để compositor bỏ qua lớp này
     const hidden = alpha < 0.04;
     if (hidden){
       if (!l._hidden){ l.el.style.visibility = 'hidden'; l._hidden = true; }
-      continue;
+      continue;   // khỏi ghi transform/opacity cho lớp ẩn
     }
     if (l._hidden){ l.el.style.visibility = ''; l._hidden = false; }
 
     l.el.style.transform =
       `translate3d(${(cx - l.sizePx/2).toFixed(1)}px, ${(cy - l.sizePx/2).toFixed(1)}px, 0) scale(${scale.toFixed(3)}) rotate(${rot.toFixed(3)}rad)`;
     l.el.style.opacity = alpha.toFixed(3);
-    l.el.style.zIndex = (1000 - Math.round(l.z*1000));
+    l.el.style.zIndex = (1000 - Math.round(l.z*1000));   // gần (z nhỏ) vẽ trên
 
+    // tên chỉ hiện khi đủ gần & không quá mờ
     if (l.cap == null && l.el.querySelector) l.cap = l.el.querySelector('.cap');
     if (l.cap) l.cap.style.display = (pp > 0.45 && l.spot < 0.5) ? '' : 'none';
   }
 }
 
+// đèn 'leaving' mờ dần rồi bị dọn khi chạm mép dải
 function fadeMul(l){
   if (l._fade == null) l._fade = 1;
   l._fade = Math.max(0, l._fade - 0.02);
@@ -425,7 +365,7 @@ fetch('/api/recent').then(r=>r.json()).then(list => {
   });
 }).catch(()=>{});
 
-// ── Realtime: đèn mới -> vào thẳng bầu trời ──
+// ── Realtime: đèn mới -> vào thẳng bầu trời (bản DOM bỏ nghi lễ entrance nặng) ──
 const socket = io();
 socket.on('new-lantern', rec => {
   if (!rec || !rec.file) return;
@@ -439,42 +379,15 @@ function renderCount(){ document.getElementById('countN').textContent = lanternC
 fetch('/api/count').then(r=>r.json()).then(d=>{ lanternCount = d.count||0; renderCount(); }).catch(()=>{});
 socket.on('new-lantern', () => { lanternCount++; renderCount(); });
 
-// ── Toàn màn hình cho TV ──
+// ── Toàn màn hình ──
 function toggleFullscreen(){
   const el = document.documentElement;
   const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
   if (!fsEl) (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
   else (document.exitFullscreen || document.webkitExitFullscreen).call(document);
 }
-function syncFsLabel(){
-  const on = document.fullscreenElement || document.webkitFullscreenElement;
-  const btn = document.getElementById('fsBtn');
-  btn.style.display = on ? 'none' : '';
-}
-document.addEventListener('fullscreenchange', syncFsLabel);
-document.addEventListener('webkitfullscreenchange', syncFsLabel);
-// tự mờ nút sau 4s không tương tác
-const fsBtn = document.getElementById('fsBtn');
-let fsTimer;
-function pokeFsBtn(){
-  fsBtn.style.opacity = '1';
-  clearTimeout(fsTimer);
-  fsTimer = setTimeout(() => { fsBtn.style.opacity = '.15'; }, 4000);
-}
-window.addEventListener('mousemove', pokeFsBtn);
-pokeFsBtn();
 
-// ── Ẩn audio tip sau tương tác đầu (bản DOM không phát tiếng, chỉ dọn gợi ý) ──
-function dismissTip(){
-  const tip = document.getElementById('audioTip');
-  if (tip) tip.style.display = 'none';
-  window.removeEventListener('click', dismissTip);
-  window.removeEventListener('keydown', dismissTip);
-}
-window.addEventListener('click', dismissTip);
-window.addEventListener('keydown', dismissTip);
-
-// ── FPS + bảng đổi trần (chỉ /screen?fps=1) ──
+// ── FPS + bảng đổi trần (chỉ /screen3?fps=1) ──
 let _fpsFrames = 0, _fpsLast = 0, _fpsReadout = null;
 const _perfOn = new URLSearchParams(location.search).has('fps');
 function fpsTick(t){
