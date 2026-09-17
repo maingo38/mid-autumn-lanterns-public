@@ -139,6 +139,9 @@ db.exec(`CREATE TABLE IF NOT EXISTS height_plays (
   meters     INTEGER NOT NULL DEFAULT 0,
   created    INTEGER NOT NULL
 )`);
+// mỗi lượt quạt là 'release' (free 1 lần khi thả đèn), 'daily' (free 1 lần/ngày)
+// hoặc 'paid' (trừ FIRE_PER_FAN lửa). Chỉ 'paid' mới tiêu lửa.
+try { db.exec("ALTER TABLE height_plays ADD COLUMN kind TEXT NOT NULL DEFAULT 'paid'"); } catch (e) {}
 
 // Google accounts that have signed in.
 db.exec(`CREATE TABLE IF NOT EXISTS users (
@@ -244,10 +247,31 @@ const HEIGHT_CFG = {
 HEIGHT_CFG.maxHits = Math.ceil(HEIGHT_CFG.durationMs / 1000) * HEIGHT_CFG.maxHitsPerSec;
 HEIGHT_CFG.maxMeters = HEIGHT_CFG.maxHits * HEIGHT_CFG.metersPerHit;
 
+// Lửa giờ CHỈ dùng để mua lượt quạt (đưa đèn bay cao hơn). 3 lửa = 1 lượt.
+// Không còn giới hạn số lượt/ngày — chơi được bao nhiêu lượt tuỳ số lửa đang có.
+const FIRE_PER_FAN = Number(process.env.FIRE_PER_FAN || 3);
+
 // ngày theo giờ Việt Nam (Asia/Ho_Chi_Minh) cho reset lượt độ cao
 function todayVN() {
   const s = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year:'numeric', month:'2-digit', day:'2-digit' });
   return s.slice(0, 10);   // 'YYYY-MM-DD'
+}
+
+// ── Mở khoá mini game theo NGÀY sự kiện ────────────────────────────
+// Sự kiện chạy 5 ngày (T2→T6). Mỗi ngày mở thêm 1 trò; user chọn chơi trò nào
+// trong số đã mở (vẫn giới hạn tổng 1 lượt chơi/ngày). EVENT_START = ngày 1.
+const EVENT_START = process.env.EVENT_START || '2026-09-21';
+// số thứ tự ngày sự kiện theo giờ VN: ngày bắt đầu = 1; <1 nghĩa là chưa tới.
+function eventDayNum() {
+  const start = new Date(EVENT_START + 'T00:00:00+07:00');
+  const now   = new Date(todayVN() + 'T00:00:00+07:00');
+  return Math.floor((now - start) / 86400000) + 1;
+}
+// trò nào mở vào ngày thứ mấy
+const GAME_UNLOCK_DAY = { shake: 1, quiz: 2, puzzle: 3, fortune: 4, catch: 5 };
+// test mode mở hết; ngược lại chỉ mở khi đã tới ngày của trò đó
+function gameUnlocked(game) {
+  return GAMES_UNLIMITED || eventDayNum() >= (GAME_UNLOCK_DAY[game] || 99);
 }
 
 // the wheel face: 6 segments worth 1–4 fires. Laid out so equal values sit
@@ -280,34 +304,47 @@ function spinDays(voter) {
 }
 
 // wallet is CUMULATIVE across the whole event (no per-day reset):
-//   earned = every fire ever won from spins (base rewards + streak bonuses)
-//   spent  = every fire ever given to a lantern
-// Only canSpin / firedToday are scoped to `day` (the once-per-day gates).
+//   earned = every fire ever won (spin + streak bonus + mini games)
+//   spent  = fire consumed buying fan plays (FIRE_PER_FAN lửa per play)
+// Only canSpin / play-slots are scoped to `day` (the once-per-day gates).
 function wallet(voter, day) {
   const spinEarned   = db.prepare('SELECT COALESCE(SUM(reward),0) AS n FROM spins WHERE voter=?').get(voter).n;
   const puzzleEarned = db.prepare('SELECT COALESCE(SUM(reward),0) AS n FROM puzzles WHERE voter=?').get(voter).n;
   const gameEarned   = db.prepare('SELECT COALESCE(SUM(reward),0) AS n FROM games WHERE voter=?').get(voter).n;
   const earned = spinEarned + puzzleEarned + gameEarned;
-  const spent  = db.prepare('SELECT COUNT(*) AS n FROM fires WHERE voter=?').get(voter).n;
+  // fire spent = CHỈ các lượt quạt trả bằng lửa (kind='paid') × giá mỗi lượt.
+  // Lượt free (release/daily) không tiêu lửa.
+  const paidPlays = db.prepare("SELECT COUNT(*) AS n FROM height_plays WHERE user_sub=? AND kind='paid'").get(voter).n;
+  const spent  = paidPlays * FIRE_PER_FAN;
+  // lượt quạt MIỄN PHÍ: 1 lần khi thả đèn (release) + 1 lần mỗi ngày (daily).
+  const hasLantern = !!db.prepare("SELECT 1 FROM lanterns WHERE user_sub=? AND status='approved'").get(voter);
+  const usedRelease = db.prepare("SELECT COUNT(*) AS n FROM height_plays WHERE user_sub=? AND kind='release'").get(voter).n;
+  const usedDaily   = db.prepare("SELECT COUNT(*) AS n FROM height_plays WHERE user_sub=? AND kind='daily' AND day=?").get(voter, todayVN()).n;
+  const freePlays = hasLantern ? ((usedRelease ? 0 : 1) + (usedDaily ? 0 : 1)) : 0;
   const spun   = !!db.prepare('SELECT 1 FROM spins WHERE voter=? AND day=?').get(voter, day);
   const puzzled= !!db.prepare('SELECT 1 FROM puzzles WHERE voter=? AND day=?').get(voter, day);
   const playedRows = db.prepare('SELECT game FROM games WHERE voter=? AND day=?').all(voter, day);
   const played = {}; playedRows.forEach(r => played[r.game] = true);
-  const fired  = db.prepare('SELECT lantern FROM fires WHERE voter=? AND day=?').all(voter, day).map(r => r.lantern);
+  const fired  = [];
   const earnedToday = db.prepare('SELECT COALESCE(SUM(reward),0) AS n FROM spins WHERE voter=? AND day=?').get(voter, day).n;
   const U = GAMES_UNLIMITED;
   // when testing is OFF, a voter may play only ONE mini game per day total
-  // (spin/wheel is separate). Playing any of the 5 locks all five.
+  // (spin/wheel is separate). Playing any of the 5 locks all five for the day.
   const playedAnyGame = puzzled || played.shake || played.quiz || played.fortune || played.catch;
   const gameOpen = U || !playedAnyGame;
-  // votes: +1 per distinct check-in day, spent on others' lanterns (accumulates)
-  const voteEarned = db.prepare('SELECT COUNT(*) AS n FROM checkins WHERE voter=?').get(voter).n;
-  const voteSpent  = db.prepare('SELECT COUNT(*) AS n FROM votes WHERE voter=?').get(voter).n;
-  return { balance: earned - spent, earned, spent, earnedToday,
-           voteBalance: voteEarned - voteSpent, voteEarned, voteSpent,
+  // a game is playable today only if: unlocked for the current event-day AND
+  // the once-per-day slot is still free (or testing is on).
+  const canPlay = g => gameUnlocked(g) && gameOpen;
+  // balance = lửa còn lại (earned - đã tiêu mua quạt). Lửa CHỈ để mua lượt quạt.
+  const balance = earned - spent;
+  // tổng lượt quạt dùng được = lượt free còn lại + lượt mua được bằng lửa.
+  const fanPlays = freePlays + Math.floor(balance / FIRE_PER_FAN);
+  return { balance, earned, spent, earnedToday,
+           firePerFan: FIRE_PER_FAN, fanPlays, freePlays,
            canSpin: SPIN_UNLIMITED || U || !spun,
-           canPuzzle: gameOpen, canShake: gameOpen, canQuiz: gameOpen,
-           canFortune: gameOpen, canCatch: gameOpen,
+           canPuzzle: canPlay('puzzle'), canShake: canPlay('shake'), canQuiz: canPlay('quiz'),
+           canFortune: canPlay('fortune'), canCatch: canPlay('catch'),
+           unlockDay: GAME_UNLOCK_DAY, eventDay: eventDayNum(),
            playedAnyGame, firedToday: fired, days: spinDays(voter) };
 }
 
@@ -516,11 +553,9 @@ app.get('/qr', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'qr.html'));
 });
 
-// "Đèn Sáng Nhất" leaderboard page + spin-the-wheel page
-app.get('/rank', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'rank.html'));
-});
-app.get('/rank-height', (req, res) => {
+// Bảng xếp hạng DUY NHẤT theo độ cao. /rank giữ lại để link cũ vẫn chạy,
+// cùng trỏ tới trang "Bay Cao Nhất".
+app.get(['/rank', '/rank-height'], (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'rank-height.html'));
 });
 app.get('/spin', (req, res) => {
@@ -597,31 +632,6 @@ app.post('/api/admin/show', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-// leaderboard: approved lanterns ranked by TOTAL fires over the whole event
-// (newest wins ties). ?voter=... also returns that person's wallet so the page
-// can gate the fire buttons.
-app.get('/api/leaderboard', (req, res) => {
-  const day = today();
-  // a lantern's "lửa" (ranking score) = votes it received from others
-  //   + the game-fire its OWNER earned (spins + puzzle + other mini games).
-  // So playing games raises your own lantern, and votes from others add on top.
-  const rows = db.prepare(
-    "SELECT l.id, COALESCE(l.ai_file, l.file) AS file, l.name, l.wish, l.user_sub, " +
-    "  (SELECT COUNT(*) FROM votes v WHERE v.lantern = l.id) " +
-    "  + COALESCE((SELECT SUM(reward) FROM spins   WHERE voter = l.user_sub),0) " +
-    "  + COALESCE((SELECT SUM(reward) FROM puzzles WHERE voter = l.user_sub),0) " +
-    "  + COALESCE((SELECT SUM(reward) FROM games   WHERE voter = l.user_sub),0) AS fires " +
-    "FROM lanterns l WHERE l.status='approved' " +
-    "ORDER BY fires DESC, l.id DESC LIMIT 50"
-  ).all();
-  // identity comes from the signed session cookie, not a client-supplied param
-  const voter = req.user ? req.user.sub : null;
-  if (voter) ensureCheckin(voter, day);
-  // don't leak each lantern's owner sub; expose only a `mine` flag for this voter
-  const board = rows.map(({ user_sub, ...r }) => ({ ...r, mine: !!voter && user_sub === voter }));
-  res.json({ day, board, wallet: voter ? wallet(voter, day) : null });
-});
-
 // bảng xếp hạng ĐỘ CAO — xếp height giảm dần; hòa thì đèn xuất hiện sớm hơn (appeared_at, id) đứng trên
 app.get('/api/leaderboard/height', (req, res) => {
   const rows = db.prepare(
@@ -634,19 +644,9 @@ app.get('/api/leaderboard/height', (req, res) => {
   res.json({ board });
 });
 
-// after a voter earns game-fire, their own lantern's score changed — recompute
-// its total lửa (votes + game-fire) and broadcast so open /rank pages resort live.
-function emitOwnerFire(sub) {
-  const lant = db.prepare("SELECT id FROM lanterns WHERE user_sub=? AND status='approved' ORDER BY id DESC LIMIT 1").get(sub);
-  if (!lant) return;
-  const fires = db.prepare(
-    "SELECT (SELECT COUNT(*) FROM votes WHERE lantern=?) " +
-    "  + COALESCE((SELECT SUM(reward) FROM spins   WHERE voter=?),0) " +
-    "  + COALESCE((SELECT SUM(reward) FROM puzzles WHERE voter=?),0) " +
-    "  + COALESCE((SELECT SUM(reward) FROM games   WHERE voter=?),0) AS n"
-  ).get(lant.id, sub, sub, sub).n;
-  io.emit('fire-changed', { id: lant.id, fires });
-}
+// Kiếm lửa KHÔNG còn đổi thứ hạng (rank giờ theo độ cao, thay đổi qua game quạt
+// -> 'height-changed'). Giữ hàm để các call site cũ (spin/game win) khỏi vỡ.
+function emitOwnerFire(_sub) { /* no-op: lửa chỉ để mua lượt quạt */ }
 
 // spin the wheel once per day -> earn 1–4 fires. Returns the landed segment
 // index (so the UI can animate to it) and the reward.
@@ -687,6 +687,7 @@ function playedAnyGameToday(voter, day) {
 app.post('/api/puzzle/win', requireAuth, (req, res) => {
   const day = today();
   const v = req.user.sub;
+  if (!gameUnlocked('puzzle')) return res.status(403).json({ error: 'locked', wallet: wallet(v, day) });
   if (playedAnyGameToday(v, day)) return res.status(409).json({ error: 'daily_limit', wallet: wallet(v, day) });
   const goals = Math.max(0, Math.min(99, Number(req.body?.goals) || 0));
   // fire table by score: 1-3 goals -> 1 lửa, 4-6 -> 2, 7-9 -> 3 … (capped at PUZZLE_MAX_REWARD)
@@ -703,6 +704,7 @@ app.post('/api/puzzle/win', requireAuth, (req, res) => {
 app.post('/api/shake/win', requireAuth, (req, res) => {
   const day = today();
   const v = req.user.sub;
+  if (!gameUnlocked('shake')) return res.status(403).json({ error: 'locked', wallet: wallet(v, day) });
   if (playedAnyGameToday(v, day)) return res.status(409).json({ error: 'daily_limit', wallet: wallet(v, day) });
   const score = Math.max(0, Math.min(100, Number(req.body?.score) || 0));
   const reward = score >= 80 ? SHAKE_MAX_REWARD : score >= 50 ? 3 : 2;
@@ -718,6 +720,7 @@ app.post('/api/shake/win', requireAuth, (req, res) => {
 app.post('/api/quiz/win', requireAuth, (req, res) => {
   const day = today();
   const v = req.user.sub;
+  if (!gameUnlocked('quiz')) return res.status(403).json({ error: 'locked', wallet: wallet(v, day) });
   if (playedAnyGameToday(v, day)) return res.status(409).json({ error: 'daily_limit', wallet: wallet(v, day) });
   const result = (req.body?.result || '').toString().slice(0, 40);
   const r = db.prepare("INSERT OR IGNORE INTO games (voter, day, game, reward, data, created) VALUES (?, ?, 'quiz', ?, ?, ?)")
@@ -732,6 +735,7 @@ app.post('/api/quiz/win', requireAuth, (req, res) => {
 app.post('/api/fortune/win', requireAuth, (req, res) => {
   const day = today();
   const v = req.user.sub;
+  if (!gameUnlocked('fortune')) return res.status(403).json({ error: 'locked', wallet: wallet(v, day) });
   if (playedAnyGameToday(v, day)) return res.status(409).json({ error: 'daily_limit', wallet: wallet(v, day) });
   const score = Math.max(0, Math.min(100, Number(req.body?.score) || 0));
   const reward = score >= 80 ? BAKE_MAX_REWARD : score >= 50 ? 3 : 2;
@@ -747,6 +751,7 @@ app.post('/api/fortune/win', requireAuth, (req, res) => {
 app.post('/api/catch/win', requireAuth, (req, res) => {
   const day = today();
   const v = req.user.sub;
+  if (!gameUnlocked('catch')) return res.status(403).json({ error: 'locked', wallet: wallet(v, day) });
   if (playedAnyGameToday(v, day)) return res.status(409).json({ error: 'daily_limit', wallet: wallet(v, day) });
   const score = Math.max(0, Math.min(100, Number(req.body?.score) || 0));
   const reward = score >= 80 ? CATCH_MAX_REWARD : score >= 50 ? 3 : 2;
@@ -772,17 +777,18 @@ function activePlay(sub){
   return db.prepare('SELECT * FROM height_plays WHERE user_sub=? AND finalized=0 AND ends_at>? ORDER BY id DESC LIMIT 1').get(sub, now);
 }
 
-// trạng thái bước 5: độ cao, lượt còn lại, lượt đang chạy (nếu có)
+// trạng thái bước 5: độ cao, số lượt quạt MUA được bằng lửa, lượt đang chạy (nếu có)
 app.get('/api/height/state', requireAuth, (req, res) => {
-  const sub = req.user.sub, day = todayVN();
+  const sub = req.user.sub;
   const lant = myLanternRow(sub);
   if (!lant) return res.json({ hasLantern: false });
-  const used = heightPlaysUsed(sub, day);
+  const w = wallet(sub, today());
   const ap = activePlay(sub);
   res.json({
     hasLantern: true, appeared: !!lant.appeared, height: lant.height,
-    playsLeft: Math.max(0, HEIGHT_CFG.playsPerDay - used),
-    playsPerDay: HEIGHT_CFG.playsPerDay, durationMs: HEIGHT_CFG.durationMs,
+    // lượt quạt = lượt free còn lại + số lửa còn / giá mỗi lượt
+    playsLeft: w.fanPlays, freePlays: w.freePlays, balance: w.balance, firePerFan: FIRE_PER_FAN,
+    durationMs: HEIGHT_CFG.durationMs,
     active: ap ? { id: ap.id, endsAt: ap.ends_at } : null,
   });
 });
@@ -801,15 +807,22 @@ app.post('/api/height/start', requireAuth, (req, res) => {
   // đang có lượt chạy dở -> khôi phục thay vì tạo mới
   const ap = activePlay(sub);
   if (ap) return res.json({ ok: true, playId: ap.id, endsAt: ap.ends_at, resumed: true });
-  // hết lượt?
-  if (heightPlaysUsed(sub, day) >= HEIGHT_CFG.playsPerDay)
-    return res.status(403).json({ error: 'no_plays_left', playsLeft: 0 });
+  // còn lượt nào không? (free release/daily + lượt mua bằng lửa)
+  const w = wallet(sub, today());
+  if (w.fanPlays < 1)
+    return res.status(403).json({ error: 'no_fire', playsLeft: 0, balance: w.balance, firePerFan: FIRE_PER_FAN });
+  // chọn loại lượt: ưu tiên free (release trước, rồi daily), hết free mới trừ lửa (paid).
+  const usedRelease = db.prepare("SELECT COUNT(*) AS n FROM height_plays WHERE user_sub=? AND kind='release'").get(sub).n;
+  const usedDaily   = db.prepare("SELECT COUNT(*) AS n FROM height_plays WHERE user_sub=? AND kind='daily' AND day=?").get(sub, day).n;
+  const kind = !usedRelease ? 'release' : (!usedDaily ? 'daily' : 'paid');
   const endsAt = now + HEIGHT_CFG.durationMs;
   const info = db.prepare(
-    'INSERT INTO height_plays (user_sub, lantern_id, day, request_id, started_at, ends_at, created) VALUES (?,?,?,?,?,?,?)'
-  ).run(sub, lant.id, day, rid, now, endsAt, now);
+    'INSERT INTO height_plays (user_sub, lantern_id, day, request_id, started_at, ends_at, created, kind) VALUES (?,?,?,?,?,?,?,?)'
+  ).run(sub, lant.id, day, rid, now, endsAt, now, kind);
+  // 'paid' -> đã trừ FIRE_PER_FAN lửa; free -> không tốn lửa (wallet tính theo kind)
+  const w2 = wallet(sub, today());
   res.json({ ok: true, playId: info.lastInsertRowid, endsAt,
-    playsLeft: Math.max(0, HEIGHT_CFG.playsPerDay - heightPlaysUsed(sub, day)) });
+    playsLeft: w2.fanPlays, balance: w2.balance, kind });
 });
 
 // chốt 1 lượt — server tính mét từ số hits (đã chặn trần), cộng vào lantern.height
@@ -823,7 +836,7 @@ app.post('/api/height/finish', requireAuth, (req, res) => {
   // đã chốt rồi -> idempotent: trả kết quả cũ, không cộng lần nữa
   if (play.finalized) {
     return res.json({ ok: true, added: play.meters, total: lant ? lant.height : 0,
-      playsLeft: Math.max(0, HEIGHT_CFG.playsPerDay - heightPlaysUsed(sub, day)), already: true });
+      playsLeft: wallet(sub, today()).fanPlays, already: true });
   }
   // chặn trần hits theo thời lượng, đổi ra mét
   const capped = Math.min(hits, HEIGHT_CFG.maxHits);
@@ -835,8 +848,7 @@ app.post('/api/height/finish', requireAuth, (req, res) => {
   tx();
   const total = db.prepare('SELECT height FROM lanterns WHERE id=?').get(play.lantern_id).height;
   io.emit('height-changed', { id: play.lantern_id, height: total });
-  res.json({ ok: true, added, total,
-    playsLeft: Math.max(0, HEIGHT_CFG.playsPerDay - heightPlaysUsed(sub, day)) });
+  res.json({ ok: true, added, total, playsLeft: wallet(sub, today()).fanPlays });
 });
 
 // record today's check-in (idempotent) -> grants +1 vote the first time each day
@@ -852,61 +864,12 @@ app.get('/api/wallet', (req, res) => {
   res.json({ day: today(), wheel: WHEEL, wallet: wallet(req.user.sub, today()) });
 });
 
-// cast N votes on a lantern (default 1). Votes are separate from fire; you may
-// pile several on one lantern or spread them, but never vote your own lantern.
-app.post('/api/vote', requireAuth, (req, res) => {
-  const day = today();
-  const v = req.user.sub;
-  const lanternId = Number(req.body?.id);
-  const n = Math.max(1, Math.min(50, Number(req.body?.n) || 1));
-  if (!lanternId) return res.status(400).json({ error: 'need id' });
-  const row = db.prepare("SELECT id, user_sub FROM lanterns WHERE id=? AND status='approved'").get(lanternId);
-  if (!row) return res.status(404).json({ error: 'not found' });
-  if (row.user_sub && row.user_sub === v) return res.status(403).json({ error: 'no_self_vote', wallet: wallet(v, day) });
-  ensureCheckin(v, day);
-  const w = wallet(v, day);
-  if (w.voteBalance < n) return res.status(403).json({ error: 'not_enough_votes', wallet: w });
-  const ins = db.prepare('INSERT INTO votes (lantern, voter, day, created) VALUES (?, ?, ?, ?)');
-  const tx = db.transaction(() => { for (let i=0;i<n;i++) ins.run(lanternId, v, day, Date.now()); });
-  tx();
-  // total lửa = votes received + the target owner's own game-fire (match the board)
-  const votesGot = db.prepare('SELECT COUNT(*) AS n FROM votes WHERE lantern=?').get(lanternId).n;
-  const owner = row.user_sub;
-  const gameFire = owner ? db.prepare(
-    "SELECT COALESCE((SELECT SUM(reward) FROM spins   WHERE voter=?),0) " +
-    "     + COALESCE((SELECT SUM(reward) FROM puzzles WHERE voter=?),0) " +
-    "     + COALESCE((SELECT SUM(reward) FROM games   WHERE voter=?),0) AS n"
-  ).get(owner, owner, owner).n : 0;
-  const fires = votesGot + gameFire;
-  io.emit('fire-changed', { id: lanternId, fires });
-  res.json({ ok: true, fires, wallet: wallet(v, day) });
-});
-
 // testing toggle: ON = play every game unlimited times; OFF = once per day.
 // Server-wide (affects everyone) and resets to the env default on restart.
 app.get('/api/testing', (req, res) => res.json({ testing: GAMES_UNLIMITED }));
 app.post('/api/testing', (req, res) => {
   GAMES_UNLIMITED = !!(req.body && req.body.on);
   res.json({ testing: GAMES_UNLIMITED });
-});
-
-// spend one fire on a lantern. Requires balance > 0 and not already fired today.
-app.post('/api/fire', requireAuth, (req, res) => {
-  const day = today();
-  const lanternId = Number(req.body?.id);
-  const v = req.user.sub;
-  if (!lanternId) return res.status(400).json({ error: 'need id' });
-  const row = db.prepare("SELECT id FROM lanterns WHERE id=? AND status='approved'").get(lanternId);
-  if (!row) return res.status(404).json({ error: 'not found' });
-  const w = wallet(v, day);
-  if (w.balance <= 0) return res.status(403).json({ error: 'no_fires', wallet: w });
-  // INSERT OR IGNORE: already fired this lantern today => no-op, refund nothing spent
-  const r = db.prepare('INSERT OR IGNORE INTO fires (lantern, voter, day, created) VALUES (?, ?, ?, ?)')
-    .run(lanternId, v, day, Date.now());
-  if (r.changes === 0) return res.status(409).json({ error: 'already_fired', wallet: w });
-  const fires = db.prepare('SELECT COUNT(*) AS n FROM fires WHERE lantern=? AND day=?').get(lanternId, day).n;
-  io.emit('fire-changed', { id: lanternId, fires });
-  res.json({ ok: true, fires, wallet: wallet(v, day) });
 });
 
 // list available lantern templates (any *_lines.png in public/templates)
@@ -925,27 +888,15 @@ app.get('/api/templates', (req, res) => {
 app.get('/api/my-lantern', (req, res) => {
   if (!req.user) return res.json({ lantern: null });
   const row = db.prepare(
-    "SELECT id, COALESCE(ai_file, file) AS file, name, wish, status, appeared, height FROM lanterns " +
+    "SELECT id, COALESCE(ai_file, file) AS file, file AS rawFile, name, wish, status, appeared, height FROM lanterns " +
     "WHERE user_sub=? AND status='approved' ORDER BY id DESC LIMIT 1"
   ).get(req.user.sub);
   if (!row) return res.json({ lantern: null });
-  // score = votes received + this owner's own game-fire (same formula as the board)
-  const sub = req.user.sub;
-  const gameFire = db.prepare(
-    "SELECT COALESCE((SELECT SUM(reward) FROM spins   WHERE voter=?),0) " +
-    "     + COALESCE((SELECT SUM(reward) FROM puzzles WHERE voter=?),0) " +
-    "     + COALESCE((SELECT SUM(reward) FROM games   WHERE voter=?),0) AS n"
-  ).get(sub, sub, sub).n;
-  const votesGot = db.prepare('SELECT COUNT(*) AS n FROM votes WHERE lantern=?').get(row.id).n;
-  const fires = votesGot + gameFire;
+  // xếp hạng theo ĐỘ CAO (khớp bảng /rank-height): đèn cao hơn đứng trên.
   const rank = db.prepare(
-    "SELECT COUNT(*)+1 AS r FROM lanterns l WHERE l.status='approved' AND " +
-    "( (SELECT COUNT(*) FROM votes v WHERE v.lantern=l.id) " +
-    "  + COALESCE((SELECT SUM(reward) FROM spins   WHERE voter=l.user_sub),0) " +
-    "  + COALESCE((SELECT SUM(reward) FROM puzzles WHERE voter=l.user_sub),0) " +
-    "  + COALESCE((SELECT SUM(reward) FROM games   WHERE voter=l.user_sub),0) ) > ?"
-  ).get(fires).r;
-  res.json({ lantern: { ...row, fires, rank } });
+    "SELECT COUNT(*)+1 AS r FROM lanterns WHERE status='approved' AND height > ?"
+  ).get(row.height).r;
+  res.json({ lantern: { ...row, rank } });
 });
 
 // most recent APPROVED lanterns, newest last — the screen asks for these on load
@@ -972,7 +923,7 @@ app.get('/api/qr', async (req, res) => {
   try {
     const dataUrl = await qrcode.toDataURL(url, {
       margin: 2, width: 720, errorCorrectionLevel: 'M',   // M = ít module hơn -> dễ quét khi in/hiển thị nhỏ
-      color: { dark: '#000000', light: '#ffffff' },       // đen thuần trên trắng = tương phản tối đa
+      color: { dark: '#000000', light: '#00000000' },     // module đen thuần, nền trong suốt -> hòa vào layout sáng phía sau
     });
     res.json({ url, dataUrl });
   } catch (e) {
