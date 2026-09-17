@@ -6,7 +6,6 @@
 <style>
   html,body{margin:0;height:100%;overflow:hidden;background:#0a0620;}
   canvas{display:block;}
-  #hint{position:fixed;left:12px;bottom:10px;color:#ffffff55;font:14px system-ui;}
 
   #audioTip{ position:fixed; left:50%; top:18px; transform:translateX(-50%); z-index:11;
              background:#8a1a12cc; color:#ffe9b0; border:1px solid #ffd77a; border-radius:20px;
@@ -32,14 +31,13 @@
   /* QR góc phải dưới — khung tre cắt từ demo.jpeg, QR thật đặt đè lên ô trắng */
   #qrCard{ position:fixed; right:48px; bottom:60px; z-index:10; width:246px;
            text-align:center; font-family:system-ui,sans-serif;
-           filter:drop-shadow(0 12px 30px #000a) drop-shadow(0 0 30px #ff9a1a55); }
+           filter:drop-shadow(0 0 30px #ff9a1a55); }
   #qrLantern{ position:relative; width:246px; height:192px; margin:0 auto;
     background:url('/decor/qr-frame.png') center/contain no-repeat; }
   /* ô trắng thật của khung nằm ~ 12%..80% ngang, 8%..88% dọc -> đặt QR khít vào giữa vùng đó */
   #qrCard .box{ position:absolute; left:17%; top:13%; width:52%; height:72%;
     display:flex; align-items:center; justify-content:center; }
-  #qrCard .box img{ width:100%; height:100%; object-fit:contain; image-rendering:pixelated;
-    background:#fff; padding:3px; border-radius:2px; }
+  #qrCard .box img{ position:relative; z-index:1; width:100%; height:100%; object-fit:contain; image-rendering:pixelated; }
   /* nhãn dưới khung */
   #qrCard .tt{ color:#fff; font-weight:700; font-size:20px; margin-top:10px; letter-spacing:.2px;
     text-shadow:0 2px 8px #000a; }
@@ -48,7 +46,6 @@
 </head>
 <body>
 <canvas id="sky"></canvas>
-<div id="hint">🏮 Mid-Autumn Lantern Sky</div>
 <div id="audioTip">🔊 Chạm một lần để bật âm thanh</div>
 
 
@@ -460,10 +457,9 @@ fetch('/api/recent').then(r=>r.json()).then(list => {
 const socket = io();
 socket.on('new-lantern', enqueueEntrance);
 
-// load the QR (points at the colouring page) into the corner card
-fetch('/api/qr').then(r=>r.json()).then(({dataUrl}) => {
-  if (dataUrl) document.getElementById('qrImg').src = dataUrl;
-}).catch(()=>{});
+// QR = file tĩnh đã xoá nền (public/decor/qr-live.png), trỏ tới lantern.vml-team.site.
+// Thay ảnh này là đổi QR — không cần sửa code. ?v=... để phá cache trình duyệt.
+document.getElementById('qrImg').src = '/decor/qr-live.png?v=' + Date.now();
 
 // browsers block audio until the first user gesture — one click on the screen unlocks it
 function unlockAudio(){
