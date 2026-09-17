@@ -54,30 +54,33 @@
   @keyframes countGlow{ 0%,100%{ text-shadow:0 2px 10px #000a, 0 0 14px #ffb43a44; opacity:.94 }
     50%{ text-shadow:0 2px 10px #000a, 0 0 26px #ffb43a99; opacity:1 } }
 
-  /* Lồng đèn VML góc trái-trên — treo lơ lửng, sáng nhấp nháy (1 phần tử -> mượt) */
+  /* Lồng đèn VML góc trái-trên — treo lơ lửng, sáng nhấp nháy.
+     Hào quang = lớp gradient phía sau + animate OPACITY (compositor GPU),
+     KHÔNG dùng filter:drop-shadow động (blur mỗi frame trên CPU -> lag TV). */
   #vmlLantern{ position:fixed; left:30px; top:24px; z-index:55; width:15vh; max-width:150px;
     pointer-events:none; transform-origin:50% 8%;
     animation:vmlSway 4.6s ease-in-out infinite; }
-  #vmlLantern img{ display:block; width:100%; height:auto;
-    filter:drop-shadow(0 0 var(--g1,20px) #fff2c0) drop-shadow(0 0 var(--g2,44px) #ffb43acc)
-           drop-shadow(0 0 var(--g3,80px) #ff7a1a88) drop-shadow(0 8px 18px #0008)
-           brightness(var(--b,1));
+  #vmlLantern::before{ content:''; position:absolute; left:50%; top:42%;
+    width:220%; height:220%; transform:translate(-50%,-50%); z-index:-1; pointer-events:none;
+    background:radial-gradient(circle, rgba(255,200,110,0.85) 0%, rgba(255,150,50,0.4) 40%, rgba(255,120,20,0) 70%);
     animation:vmlGlow 2s ease-in-out infinite; }
+  #vmlLantern img{ display:block; width:100%; height:auto; }
   @keyframes vmlSway{ 0%,100%{ transform:rotate(-2.5deg) translateY(0) } 50%{ transform:rotate(2.5deg) translateY(-6px) } }
   @keyframes vmlGlow{
-    0%,100%{ --g1:18px; --g2:36px; --g3:64px; --b:1;    opacity:.92 }
-    30%    { --g1:26px; --g2:60px; --g3:104px; --b:1.22; opacity:1 }
-    48%    { --g1:20px; --g2:42px; --g3:76px; --b:1.05; opacity:.95 }
-    68%    { --g1:30px; --g2:70px; --g3:120px; --b:1.3;  opacity:1 }
-    84%    { --g1:22px; --g2:48px; --g3:84px; --b:1.12; opacity:.97 }
+    0%,100%{ opacity:.7;  transform:translate(-50%,-50%) scale(0.95) }
+    30%    { opacity:1;   transform:translate(-50%,-50%) scale(1.08) }
+    48%    { opacity:.82; transform:translate(-50%,-50%) scale(1.0)  }
+    68%    { opacity:1;   transform:translate(-50%,-50%) scale(1.12) }
+    84%    { opacity:.88; transform:translate(-50%,-50%) scale(1.03) }
   }
 
   /* QR góc phải dưới — khung tre (QR đã in sẵn trong ảnh) */
   #qrCard{ position:fixed; right:48px; bottom:60px; z-index:55; width:160px;
-           text-align:center; font-family:system-ui,sans-serif;
-           filter:drop-shadow(0 0 30px #ff9a1a55); }
+           text-align:center; font-family:system-ui,sans-serif; }
   #qrLantern{ position:relative; width:160px; height:160px; margin:0 auto;
     background:url('/decor/qr-cube-final.png') center/contain no-repeat; }
+  #qrLantern::before{ content:''; position:absolute; inset:-20%; z-index:-1; pointer-events:none;
+    background:radial-gradient(circle, rgba(255,154,26,0.33) 0%, rgba(255,154,26,0) 70%); }
   #qrCard .tt{ color:#fff; font-weight:700; font-size:15px; margin-top:-6px; letter-spacing:.2px; white-space:nowrap;
     text-shadow:0 2px 8px #000a; }
 
