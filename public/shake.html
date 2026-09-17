@@ -58,9 +58,30 @@
   /* lu1edbp phu1ee7 tu1889 nhu1eb9 tru00ean nu1ec1n demo -> chu1eef du1ec5 u0111u1ecdc */
   body::before{ content:''; position:fixed; inset:0; z-index:0; pointer-events:none;
     background:linear-gradient(180deg, #0a081e33 0%, #0a081e66 55%, #0a081eaa 100%); }
+  /* rabbit nav dropdown (góc phải trên) */
+  .rnav{ position:fixed; top:calc(10px + env(safe-area-inset-top)); right:12px; z-index:9999; }
+  .rnav-btn{ display:flex; align-items:center; gap:4px; cursor:pointer; font-size:20px; line-height:1;
+    color:#ffe9b0; background:rgba(20,14,40,.7); border:1px solid rgba(255,215,120,.4); border-radius:999px;
+    padding:8px 12px; box-shadow:0 4px 14px rgba(0,0,0,.4); -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px); }
+  .rnav-btn .caret{ font-size:12px; color:#ffd166; }
+  .rnav-menu{ position:absolute; top:calc(100% + 8px); right:0; min-width:190px; display:none;
+    background:rgba(20,14,40,.96); border:1px solid rgba(255,215,120,.35); border-radius:14px;
+    box-shadow:0 12px 32px rgba(0,0,0,.55); overflow:hidden; padding:6px; }
+  .rnav.open .rnav-menu{ display:block; }
+  .rnav-item{ display:flex; align-items:center; gap:10px; width:100%; text-align:left; cursor:pointer;
+    font-size:15px; font-weight:700; color:#ffe9b0; background:none; border:none; border-radius:10px; padding:11px 12px; }
+  .rnav-item:hover{ background:rgba(255,209,102,.16); color:#fff; }
 </style>
 </head>
 <body>
+  <div class="rnav" id="rnav">
+    <button class="rnav-btn" id="rnavBtn" aria-haspopup="true" aria-expanded="false">🐰<span class="caret">▾</span></button>
+    <div class="rnav-menu" role="menu">
+      <button class="rnav-item" onclick="location.href='/'">🏠 Trang chính</button>
+      <button class="rnav-item" onclick="location.href='/hub'">🎮 Trò chơi</button>
+      <button class="rnav-item" onclick="location.href='/rank'">📊 Bảng xếp hạng</button>
+    </div>
+  </div>
   <h1>🏮 Lắc Đi Cho Hết Căng</h1>
   <div class="sub" id="sub">Lắc thật mạnh trong 5 giây! Lắc mạnh liên tục để vào <b style="color:#ff8c1a">CỰC PHÊ 🔥x2</b>. ≥80% = 4🔥, 50-79% = 3🔥, &lt;50% = 2🔥</div>
   <div class="bal" id="bal">🔥 …</div>
@@ -232,5 +253,13 @@
     loadWallet();
   </script>
 <script src="/cheer.js"></script>
+  <script>
+    (function(){
+      const nav = document.getElementById('rnav'), btn = document.getElementById('rnavBtn');
+      btn.addEventListener('click', e=>{ e.stopPropagation(); const open = nav.classList.toggle('open'); btn.setAttribute('aria-expanded', open?'true':'false'); });
+      document.addEventListener('click', e=>{ if(!nav.contains(e.target)){ nav.classList.remove('open'); btn.setAttribute('aria-expanded','false'); } });
+      document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ nav.classList.remove('open'); btn.setAttribute('aria-expanded','false'); } });
+    })();
+  </script>
 </body>
 </html>

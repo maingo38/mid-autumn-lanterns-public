@@ -29,6 +29,19 @@
   .nm{ flex:1; min-width:0; font-weight:700; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .h{ font-weight:800; color:var(--gold2); font-size:16px; }
   .empty{ text-align:center; color:var(--desc); margin-top:40px; }
+  /* rabbit nav dropdown (trong .top, góc phải) */
+  .rnav{ position:relative; z-index:9999; margin-left:auto; flex:0 0 auto; }
+  .rnav-btn{ display:flex; align-items:center; gap:4px; cursor:pointer; font-size:20px; line-height:1;
+    color:var(--gold2); background:rgba(20,14,40,.6); border:1px solid var(--card-border); border-radius:999px;
+    padding:8px 12px; box-shadow:0 4px 14px rgba(0,0,0,.4); }
+  .rnav-btn .caret{ font-size:12px; color:var(--gold); }
+  .rnav-menu{ position:absolute; top:calc(100% + 8px); right:0; min-width:190px; display:none;
+    background:rgba(10,7,25,.96); border:1px solid var(--card-border); border-radius:14px;
+    box-shadow:0 12px 32px rgba(0,0,0,.55); overflow:hidden; padding:6px; }
+  .rnav.open .rnav-menu{ display:block; }
+  .rnav-item{ display:flex; align-items:center; gap:10px; width:100%; text-align:left; cursor:pointer;
+    font-size:15px; font-weight:700; color:var(--gold2); background:none; border:none; border-radius:10px; padding:11px 12px; }
+  .rnav-item:hover{ background:rgba(255,209,102,.16); color:#fff; }
 </style>
 </head>
 <body>
@@ -36,6 +49,14 @@
     <div class="top">
       <a class="back" href="/">‹</a>
       <h1>🎈 Bay Cao Nhất</h1>
+      <div class="rnav" id="rnav">
+        <button class="rnav-btn" id="rnavBtn" aria-haspopup="true" aria-expanded="false">🐰<span class="caret">▾</span></button>
+        <div class="rnav-menu" role="menu">
+          <button class="rnav-item" onclick="location.href='/'">🏠 Trang chính</button>
+          <button class="rnav-item" onclick="location.href='/hub'">🎮 Trò chơi</button>
+          <button class="rnav-item" onclick="location.href='/rank'">📊 Bảng xếp hạng</button>
+        </div>
+      </div>
     </div>
     <div id="list"><div class="empty">Đang tải…</div></div>
   </div>
@@ -55,6 +76,12 @@
     }
     const esc = s => (s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
     load();
+    (function(){
+      const nav = document.getElementById('rnav'), btn = document.getElementById('rnavBtn');
+      btn.addEventListener('click', e=>{ e.stopPropagation(); const open = nav.classList.toggle('open'); btn.setAttribute('aria-expanded', open?'true':'false'); });
+      document.addEventListener('click', e=>{ if(!nav.contains(e.target)){ nav.classList.remove('open'); btn.setAttribute('aria-expanded','false'); } });
+      document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ nav.classList.remove('open'); btn.setAttribute('aria-expanded','false'); } });
+    })();
   </script>
 </body>
 </html>
