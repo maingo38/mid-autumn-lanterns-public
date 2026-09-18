@@ -187,7 +187,7 @@
 //  KHÔNG dùng filter/blur cho đèn. Nền + vignette là lớp DOM tĩnh.
 // ══════════════════════════════════════════════════════════════════
 const CONFIG = {
-  maxLanterns: 40,
+  maxLanterns: 80,
   lanternVh:   0.20,   // đường kính đèn lớp gần ~ 20% chiều nhỏ màn
   showNames:   true,
   spotZoom:    1.9,
@@ -209,7 +209,7 @@ let _lastStep = 0;
 // ── Giới hạn HIỂN THỊ đồng thời: tối đa 100 đèn trên màn. Nếu pool đông hơn,
 // ẩn bớt NGẪU NHIÊN số dư; định kỳ XOAY VÒNG — đèn đang ẩn hiện lại, đèn khác
 // ẩn thay. Đèn 'nghỉ' được tạm dừng (không tiến z) nên hiện lại đúng chỗ cũ.
-const DISPLAY_CAP = 50;       // số đèn tối đa hiển thị cùng lúc
+const DISPLAY_CAP = 80;       // số đèn tối đa hiển thị cùng lúc
 const ROTATE_MS = 9000;       // mỗi 9s đổi lượt đèn ẩn/hiện
 let _lastRotate = 0;
 function rotateVisibility(t){
@@ -406,24 +406,28 @@ function frame(t){
 
   for (let i=lanterns.length-1; i>=0; i--){
     const l = lanterns[i];
-    // đèn đang 'nghỉ': ẩn hẳn, tạm dừng (không tiến z) -> hiện lại đúng chỗ cũ
-    if (l.rest && !l.leaving){
+    // đèn đang 'nghỉ': fade-out mượt rồi tạm dừng (không tiến z) -> fade-in lại đúng chỗ cũ
+    const restResting = l.rest && !l.leaving;
+    if (l.restA == null) l.restA = 1;
+    l.restA += ((restResting ? 0 : 1) - l.restA) * 0.03;
+    // đã mờ hẳn -> ẩn để compositor bỏ qua lớp, giữ nguyên vị trí
+    if (restResting && l.restA < 0.02){
       if (!l._hidden){ l.el.style.visibility = 'hidden'; l._hidden = true; }
       continue;
     }
+    // đèn 'leaving': fade-out tại chỗ cho hết rồi mới xóa -> không pop đột ngột
+    if (l.leaving && l._fade != null && l._fade <= 0.02){ removeLantern(l); lanterns.splice(i,1); continue; }
     const isSpot = (l === spotlight);
     l.spot += ((isSpot?1:0) - l.spot) * CONFIG.spotEase;
 
-    if (!isSpot) l.z -= l.zSpeed * (1 - l.spot*0.96);
+    if (!isSpot && !restResting && !l.leaving) l.z -= l.zSpeed * (1 - l.spot*0.96);
 
     if (l.layer === 1){
       if (l.z <= Z_NEAR_LO){
-        if (l.leaving){ removeLantern(l); lanterns.splice(i,1); continue; }
         l.z = Z_NEAR_HI; Object.assign(l, newTrackNear()); l.phase = Math.random()*Math.PI*2;
       }
     } else {
       if (l.z <= -0.28){
-        if (l.leaving){ removeLantern(l); lanterns.splice(i,1); continue; }
         l.z = 1; Object.assign(l, newTrack()); l.phase = Math.random()*Math.PI*2;
       }
     }
@@ -437,12 +441,12 @@ function frame(t){
     let alpha;
     if (l.layer === 1){
       const vanishN = Math.min(1, Math.max(0, (l.z - Z_NEAR_LO)/0.10));
-      alpha = Math.max(0, Math.min(1, vanishN * (l.leaving?fadeMul(l):1)));
+      alpha = Math.max(0, Math.min(1, vanishN * l.restA * (l.leaving?fadeMul(l):1)));
     } else {
       const appear = Math.min(1, (1 - l.z)/0.12);
       const vanish = Math.min(1, Math.max(0, (l.z + 0.28)/0.30));
       const depthDim = 0.5 + 0.5*pp;
-      alpha = Math.max(0, Math.min(1, appear * vanish * depthDim * (l.leaving?fadeMul(l):1)));
+      alpha = Math.max(0, Math.min(1, appear * vanish * depthDim * l.restA * (l.leaving?fadeMul(l):1)));
     }
 
     const zoom = 1 + l.spot*(CONFIG.spotZoom-1);
@@ -473,7 +477,7 @@ function frame(t){
 
 function fadeMul(l){
   if (l._fade == null) l._fade = 1;
-  l._fade = Math.max(0, l._fade - 0.02);
+  l._fade = Math.max(0, l._fade - 0.008);
   return l._fade;
 }
 
