@@ -3,6 +3,7 @@
   "templates": [
     { "id": "tu-do",                 "name": "✏️ Vẽ tự do",            "order": 0 },
     { "id": "em-be",                 "name": "Em bé",                 "order": 2 },
+    { "id": "luong-vang",            "name": "Lượng vàng",            "order": 2.5 },
     { "id": "em-meo",                "name": "Em mèo",                "order": 3 },
     { "id": "fun-face",              "name": "Mặt cười",              "order": 4 },
     { "id": "em-cho-deo-kinh",       "name": "Em chó đeo kính",       "order": 5 },
