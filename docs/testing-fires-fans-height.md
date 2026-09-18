@@ -76,7 +76,7 @@ POST /api/height/finish  → capped hits→meters, UPDATE lanterns.height (tx)  
 
 ### 1.4 Socket / vòng đời đèn
 ```
-/screen  emit 'lantern-shown'{id}   → server set appeared=1 (1 lần)  → emit 'lantern-appeared'  server.js:1126-1132 / screen.html:313
+/screen nghe 'new-lantern'{id} → emit 'lantern-shown'{id} → server set appeared=1 (1 lần) → emit 'lantern-appeared'  server.js:1357 / screen.html:531
 index.html nghe 'lantern-appeared' → mở nút "Xem lồng đèn" → cho phép START (start yêu cầu appeared) index.html:1483 ; server.js:803
 /api/height/finish emit 'height-changed'{id,height}                              server.js:850
 ```
@@ -139,7 +139,7 @@ index.html nghe 'lantern-appeared' → mở nút "Xem lồng đèn" → cho phé
 `rank-height.html` không nghe `height-changed` (chỉ load 1 lần, `rank-height.html:44-57`). Sau khi ai đó quạt, thứ hạng không tự cập nhật đến khi reload. → Test E-5 (regression/UX).
 
 **R-9 — Phụ thuộc `appeared` để chơi: đèn bị evict khỏi screen.**
-`/screen` giữ tối đa `MAX_ON_SCREEN=80` (`server.js:97`). `lantern-shown` chỉ set `appeared` lần đầu (`server.js:1129`); nếu đèn chưa từng hiển thị (screen tắt/đông) → `appeared=0` → START luôn 403 `not_appeared` (`server.js:803`) → user có lửa nhưng không chơi được. → Test A-8.
+`/screen` phát `lantern-shown` khi nhận `new-lantern` (`screen.html:531`) → server set `appeared` lần đầu (`server.js:1357`). Nếu KHÔNG có `/screen` nào mở (screen tắt) → `lantern-shown` không bao giờ tới → `appeared=0` → START luôn 403 `not_appeared` (`server.js:1020`) → user có lửa nhưng không chơi được. → Test A-8.
 
 **R-10 — `no_fire` reset về 0 khi balance thực âm.**
 `server.js:813` trả `playsLeft:0` cứng khi `fanPlays<1`, nhưng nếu R-1 đã đẩy balance âm, state (`server.js:790`) trả `playsLeft` âm cho client → UI hiện số âm. → Test C-2.

@@ -530,6 +530,7 @@ function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;',
 const socket = io();
 socket.on('new-lantern', rec => {
   if (!rec || !rec.file) return;
+  if (rec.id != null) socket.emit('lantern-shown', { id: rec.id });  // báo server: đèn đã nhận -> mở nút quạt
   entranceQ.push(rec);
   pumpEntrance();
 });
