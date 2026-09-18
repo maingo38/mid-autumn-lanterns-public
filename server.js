@@ -77,6 +77,18 @@ function removeBackground(buf, tol = 60) {
   }
   for (let p=0;p<W*H;p++) if(seen[p]) data[p*4+3]=0;
 
+  // ALSO clear near-white INTERIOR pixels (uncoloured gaps the edge flood can't
+  // reach): kids leave parts blank -> those show sky instead of white. Conservative
+  // threshold so real pastel colouring (which is more saturated) survives.
+  // ponytail: fixed threshold; expose INTERIOR_WHITE_TOL env if a template needs tuning.
+  const iwHi = 232, iwSat = 18;   // very light + almost grey = blank paper
+  for (let p=0;p<W*H;p++){
+    if (data[p*4+3]===0) continue;
+    const r=data[p*4], g=data[p*4+1], b=data[p*4+2];
+    const mx=Math.max(r,g,b), mn=Math.min(r,g,b);
+    if (mx >= iwHi && (mx-mn) <= iwSat) data[p*4+3]=0;
+  }
+
   // 2px feather for a clean, soft edge
   for (let pass=0; pass<2; pass++){
     const snap = data.slice();
