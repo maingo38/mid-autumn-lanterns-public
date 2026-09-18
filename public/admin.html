@@ -63,6 +63,7 @@
   .act{ border:0; padding:10px; font-weight:800; font-size:14px; cursor:pointer; color:#1a1030; }
   .act.hide{ background:#ffb4b4; }
   .act.show{ background:#9ef0bd; }
+  .act.del{ background:#c0392b; color:#fff; border-top:1px solid #ffffff22; }
   .empty{ text-align:center; color:#c9b8ff; padding:40px 0; }
   .count{ color:#c9b8ff; font-size:13px; }
 </style>
@@ -153,7 +154,8 @@ function render(data){
       + `</div>`
       + (hidden
           ? `<button class="act show" data-show="${l.id}">Hiện lại</button>`
-          : `<button class="act hide" data-hide="${l.id}">Ẩn khỏi màn hình</button>`);
+          : `<button class="act hide" data-hide="${l.id}">Ẩn khỏi màn hình</button>`)
+      + `<button class="act del" data-del="${l.id}" data-nm="${esc(l.name||'(không tên)')}">🗑 Xoá hẳn tài khoản</button>`;
     grid.appendChild(el);
   }
 }
@@ -167,6 +169,15 @@ $('#grid').addEventListener('click', async e => {
   const show = e.target.getAttribute('data-show');
   if (hide){ e.target.disabled = true; await api('/api/admin/hide', { id:+hide }); reload(); }
   if (show){ e.target.disabled = true; await api('/api/admin/show', { id:+show }); reload(); }
+  const del = e.target.getAttribute('data-del');
+  if (del){
+    const nm = e.target.getAttribute('data-nm') || '';
+    if (!confirm(`XOÁ HẲN tài khoản của "${nm}"?\n\nSẽ xoá vĩnh viễn lồng đèn (kể cả ảnh), lửa, vote và toàn bộ dữ liệu trò chơi của tài khoản này. KHÔNG khôi phục được.`)) return;
+    e.target.disabled = true;
+    const r = await api('/api/admin/delete-account', { id:+del });
+    if (!r.ok) alert('Xoá thất bại: ' + (r.data.error || r.status));
+    reload();
+  }
 });
 $('#accSw').addEventListener('click', async () => {
   const r = await api('/api/admin/accepting', { on: !accepting });

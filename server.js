@@ -657,6 +657,43 @@ app.post('/api/admin/show', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
+// HARD DELETE an account + all its data, keyed off one of its lanterns.
+// Irreversible: removes image files, every lantern row for the account, the
+// users row, and all game/vote rows (voter/user_sub). Old NULL-sub lanterns
+// have no account -> just that one lantern row + its files are removed.
+app.post('/api/admin/delete-account', requireAdmin, (req, res) => {
+  const id = req.body && req.body.id;
+  const row = db.prepare('SELECT * FROM lanterns WHERE id=?').get(id);
+  if (!row) return res.status(404).json({ error: 'not_found' });
+  const sub = row.user_sub || null;
+
+  // gather every lantern belonging to this account (or just this one if no sub)
+  const lanterns = sub
+    ? db.prepare('SELECT id, file, ai_file FROM lanterns WHERE user_sub=?').all(sub)
+    : [row];
+
+  const wipe = db.transaction(() => {
+    for (const l of lanterns) {
+      for (const f of [l.file, l.ai_file]) {
+        if (!f) continue;
+        try { fs.unlinkSync(path.join(LANTERN_DIR, f)); } catch (e) { /* already gone */ }
+      }
+      db.prepare('DELETE FROM lanterns WHERE id=?').run(l.id);
+    }
+    if (sub) {
+      db.prepare('DELETE FROM users WHERE sub=?').run(sub);
+      for (const t of ['fires', 'spins', 'puzzles', 'games', 'checkins', 'votes'])
+        db.prepare(`DELETE FROM ${t} WHERE voter=?`).run(sub);
+      db.prepare('DELETE FROM height_plays WHERE user_sub=?').run(sub);
+    }
+  });
+  wipe();
+
+  for (const l of lanterns) io.emit('remove-lantern', { id: l.id });
+  io.emit('pending-changed');
+  res.json({ ok: true, deleted: lanterns.length, account: !!sub });
+});
+
 // bảng xếp hạng ĐỘ CAO — xếp height giảm dần; hòa thì đèn xuất hiện sớm hơn (appeared_at, id) đứng trên
 app.get('/api/leaderboard/height', (req, res) => {
   const rows = db.prepare(
