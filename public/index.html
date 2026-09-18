@@ -98,17 +98,18 @@
   #grid { flex:1; overflow-y:auto; display:grid; grid-template-columns:1fr 1fr;
           gap:14px; padding:8px 16px calc(18px + env(safe-area-inset-bottom)); }
   .tpl { position:relative; border-radius:20px; padding:14px 12px 12px; cursor:pointer;
-         background:linear-gradient(180deg,#ffffff14,#ffffff08);
-         border:1.5px solid #ffffff1f; backdrop-filter:blur(6px);
+         /* nền sáng kem -> line-art đen của mẫu nổi rõ, các bé dễ nhìn ra hình */
+         background:linear-gradient(180deg,#fffaf0,#ffeccf);
+         border:1.5px solid #ffd7a0aa;
          display:flex; flex-direction:column; align-items:center; gap:10px;
-         box-shadow:0 6px 18px #0004; transition:transform .14s, border-color .14s, box-shadow .2s;
+         box-shadow:0 6px 18px #0005; transition:transform .14s, border-color .14s, box-shadow .2s;
          animation:cardIn .35s ease backwards; }
   .tpl:nth-child(2){animation-delay:.05s}.tpl:nth-child(3){animation-delay:.1s}
   .tpl:nth-child(4){animation-delay:.15s}.tpl:nth-child(5){animation-delay:.2s}
   .tpl:nth-child(6){animation-delay:.25s}
   @keyframes cardIn{ from{opacity:0; transform:translateY(12px) scale(.96)} to{opacity:1; transform:none} }
   .tpl img { width:100%; height:128px; object-fit:contain; filter:drop-shadow(0 6px 14px #ffd77a44); transition:transform .2s; }
-  .tpl span { font-weight:800; font-size:14px; color:#ffe9b0; }
+  .tpl span { font-weight:800; font-size:14px; color:#7a3b12; }
   .tpl:active { transform:scale(0.95); }
   .tpl:hover { border-color:#ffd16688; box-shadow:0 10px 26px #ffcf6a33; }
   .tpl:hover img { transform:scale(1.06) translateY(-2px); }
@@ -688,6 +689,27 @@ const NAMES = {
   'sua':'Con sứa', 'tau-vu-tru':'Tàu vũ trụ', 'tho-trong-am-tra':'Thỏ trong ấm trà'
 };
 const pretty = s => (TPL_CFG && TPL_CFG[s] && TPL_CFG[s].name) || NAMES[s] || s.replace(/-/g,' ').replace(/\b\w/g, c=>c.toUpperCase());
+
+// attractive inline thumbnail for the free-draw card (blank _lines.png stays the canvas overlay)
+const TUDO_THUMB = 'data:image/svg+xml,' + encodeURIComponent(`
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'>
+  <defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>
+    <stop offset='0' stop-color='#ff7a7a'/><stop offset='.35' stop-color='#ffb84d'/>
+    <stop offset='.7' stop-color='#4dd0b1'/><stop offset='1' stop-color='#8a7bff'/>
+  </linearGradient></defs>
+  <path d='M30 120 C54 72 78 72 96 112 S140 150 170 94' fill='none'
+        stroke='url(#g)' stroke-width='13' stroke-linecap='round'/>
+  <g transform='rotate(40 170 94)'>
+    <rect x='160' y='26' width='20' height='58' rx='4' fill='#ffcf6a' stroke='#7a3b12' stroke-width='3'/>
+    <rect x='160' y='26' width='20' height='12' fill='#ff9d5c' stroke='#7a3b12' stroke-width='3'/>
+    <polygon points='160,84 180,84 170,104' fill='#ffe6c2' stroke='#7a3b12' stroke-width='3' stroke-linejoin='round'/>
+    <polygon points='164,95 176,95 170,104' fill='#7a3b12'/>
+  </g>
+  <g fill='#ffcf6a' stroke='#7a3b12' stroke-width='2' stroke-linejoin='round'>
+    <polygon points='52,42 55.5,52.5 66,56 55.5,59.5 52,70 48.5,59.5 38,56 48.5,52.5'/>
+    <polygon points='120,150 122.5,157.5 130,160 122.5,162.5 120,170 117.5,162.5 110,160 117.5,157.5'/>
+  </g>
+</svg>`);
 
 // ---- lưu nháp: mỗi mẫu 1 bản riêng, giữ nét vẽ + tool/màu/cỡ khi reload/đổi mẫu ----
 const draftKey = t => 'ml_draft_' + (t || 'tu-do');
@@ -1392,7 +1414,7 @@ async function buildPicker(){
     const card = document.createElement('div');
     card.className = 'tpl';
     const img = document.createElement('img');
-    img.src = `/templates/${n}_lines.png`; img.alt = pretty(n);
+    img.src = n === 'tu-do' ? TUDO_THUMB : `/templates/${n}_lines.png`; img.alt = pretty(n);
     const label = document.createElement('span');
     label.textContent = pretty(n);
     card.appendChild(img); card.appendChild(label);
