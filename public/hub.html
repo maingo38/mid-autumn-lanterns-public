@@ -21,6 +21,10 @@
   .hi .name{ font-weight:800; font-size:16px; color:var(--gold2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .hi .bal{ font-size:14px; color:#ffbe6b; font-weight:700; }
   .logout{ font-size:12px; color:#cbb8ff; text-decoration:none; border:1px solid rgba(255,215,120,.3); border-radius:999px; padding:6px 12px; flex:0 0 auto; }
+  .backfan{ flex:0 0 auto; display:inline-flex; align-items:center; gap:5px; font-size:13px; font-weight:800;
+    color:#ffe9b0; text-decoration:none; background:rgba(20,14,40,.7); border:1px solid rgba(255,215,120,.4);
+    border-radius:999px; padding:7px 13px; box-shadow:0 4px 14px rgba(0,0,0,.4); }
+  .backfan .ar{ font-size:17px; line-height:1; margin-top:-1px; }
   h1{ text-align:center; margin:8px 0 16px; font-size:clamp(22px,5.4vw,30px); font-weight:800;
     background:linear-gradient(180deg,#fff6e2,var(--gold) 55%,#ff8c1a);
     -webkit-background-clip:text; background-clip:text; color:transparent; text-shadow:0 0 30px rgba(255,180,80,.25); }
@@ -101,6 +105,7 @@
   <div class="wrap">
     <div class="top">
       <img class="avatar" id="avatar" alt="">
+      <a class="backfan" href="/" title="Về quạt lồng đèn"><span class="ar">‹</span>Quạt đèn</a>
       <div class="hi">
         <div class="name" id="uname">…</div>
         <div class="bal" id="bal">🔥 … lửa</div>
@@ -137,7 +142,7 @@
     <div class="section">🎮 Mini game — chơi mỗi ngày nhận lửa</div>
     <div class="games" id="games"></div>
 
-    <div class="testbar">
+    <div class="testbar" id="testbar" style="display:none">
       <div class="lbl">🧪 <b>Chế độ test</b><br><span id="testHint">Bật: chơi nhiều lần · Tắt: mỗi trò 1 lần/ngày</span></div>
       <div class="switch" id="testSwitch" role="switch" aria-label="Chế độ test"></div>
     </div>
@@ -165,7 +170,11 @@
         if (w.canSpin) document.getElementById('spinBadge').style.display = '';
       }
       renderGames(w || {});
-      initTestToggle();
+      // nút chế độ test chỉ dành cho admin
+      if (me.email === 'khoa27012000@gmail.com'){
+        document.getElementById('testbar').style.display = '';
+        initTestToggle();
+      }
     }
 
     async function initTestToggle(){
